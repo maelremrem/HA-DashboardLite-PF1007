@@ -37,12 +37,12 @@ def validate_slideshow(value: dict) -> dict:
         raise ValueError("Invalid idle interval")
     if type(value.get("interval_seconds")) is not int or not 5 <= value["interval_seconds"] <= 300:
         raise ValueError("Invalid photo interval")
-    if value.get("source") not in {"local", "camera"}:
+    if value.get("source") not in {"local", "camera", "image"}:
         raise ValueError("Invalid photo source")
     entity = value.get("camera_entity", "")
     if not isinstance(entity, str) or (
-        entity and not re.fullmatch(r"camera\.[a-z0-9_]+", entity)
-    ) or (value["source"] == "camera" and not entity):
+        entity and not re.fullmatch(r"(?:camera|image)\.[a-z0-9_]+", entity)
+    ) or (value["source"] != "local" and not entity):
         raise ValueError("Invalid slideshow camera")
     return deepcopy(value)
 
