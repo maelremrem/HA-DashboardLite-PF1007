@@ -471,6 +471,8 @@ class HaFrameVisualEditor extends HTMLElement {
     this._historyGroup = "";
     this._historyGroupAt = 0;
     this._styleClipboard = null;
+    this._profiles = [];
+    this._snapshots = [];
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -659,6 +661,7 @@ class HaFrameVisualEditor extends HTMLElement {
       "<div class='row toolbar'>" +
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
       "<button data-action='photos'>Photos / Veille</button>" +
+      "<button data-action='profiles'>Profils / Sauvegardes</button>" +
       "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
       "<button data-action='undo' title='Annuler (Ctrl/Cmd+Z)' aria-label='Annuler la dernière modification'" +
@@ -673,7 +676,12 @@ class HaFrameVisualEditor extends HTMLElement {
       "<div class='hint' style='margin-top:9px'>Simulation du rendu Canvas Android. Les états affichés viennent de Home Assistant ; aucun appareil n’est actionné depuis cet aperçu.</div></div>" +
       "<aside class='inspector' data-inspector></aside></div>" +
       "<div class='footer'><div class='row'>" +
-      (cloneOptions ? "<label class='muted'>Copier la config d’un autre cadre :</label><select data-control='source'>" + cloneOptions + "</select><button class='btn-small' data-action='clone'>Copier</button>" : "<span class='muted'>Chaque cadre conserve sa configuration indépendante.</span>") +
+      (cloneOptions ? "<label class='muted'>Copier depuis un autre cadre :</label><select data-control='source'>" +
+        cloneOptions + "</select><select data-control='clone-mode'>" +
+        option("all","Tout","all") + option("theme","Thème uniquement","") +
+        option("pages","Pages uniquement","") + "</select>" +
+        "<button class='btn-small' data-action='clone'>Copier</button>" :
+        "<span class='muted'>Chaque cadre conserve sa configuration indépendante.</span>") +
       "</div><div class='row'><span class='status" + (this._error ? " error" : "") + "' data-notice>" +
       esc(this._notice || (this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre")) +
       "</span><button data-action='discard' title='Relire le cadre et perdre les modifications locales'>Recharger le cadre</button><button class='primary' data-action='save'" +
@@ -884,6 +892,25 @@ class HaFrameVisualEditor extends HTMLElement {
         Object.entries(TYPOGRAPHY).map(([id,p])=>option(id,p.label,readTypography(this._config.custom_css))).join("") +
         "</select></label>" +
         "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
+    } else if (this._panel === "profiles") {
+      html = "<div class='inspector-head'><strong>Profils et restaurations</strong></div>" +
+        "<p class='hint'>Les profils enregistrent seulement le dashboard et le CSS, jamais les jetons Home Assistant. Appliquer un profil ne modifie pas le cadre tant que tu ne cliques pas sur Enregistrer.</p>" +
+        "<label class='field'>Nom du nouveau profil<input data-control='profile-name' maxlength='48' placeholder='Écran du salon'></label>" +
+        "<button data-action='profile-save'>Enregistrer le profil actuel</button>" +
+        "<label class='field'>Profils existants<select data-control='profile-picker'>" +
+        this._profiles.map(p=>option(p.id,p.name+" · "+p.created,"")).join("") +
+        "</select></label>" +
+        "<div class='actions'><button data-action='profile-apply'>Charger dans Studio</button>" +
+        "<button data-action='profile-delete' class='danger'>Supprimer le profil</button></div>" +
+        "<div class='inspector-head'><strong>Historique du cadre</strong></div>" +
+        "<label class='field'>Anciennes configurations<select data-control='snapshot-picker'>" +
+        this._snapshots.map(p=>option(p.revision,p.created,"")).join("") +
+        "</select></label><button data-action='snapshot-apply'>Restaurer dans Studio</button>" +
+        "<div class='inspector-head'><strong>Importer / exporter</strong></div>" +
+        "<div class='actions'><button data-action='export-layout'>Exporter JSON</button>" +
+        "<button data-action='import-layout'>Importer JSON</button></div>" +
+        "<input data-import-file type='file' accept='.json,application/json' hidden>" +
+        "<p class='hint'>Un historique de 8 versions est conservé par cadre après les enregistrements.</p>";
     } else if (this._panel === "photos") {
       const opts = this._config.slideshow || {
         enabled:false,idle_seconds:300,interval_seconds:30,show_clock:true,
