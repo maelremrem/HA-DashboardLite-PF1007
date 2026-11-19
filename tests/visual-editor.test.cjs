@@ -19,7 +19,7 @@ const sandbox = {
   console
 };
 
-const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, withTypography, removeDesign, readShape, readTypography })", sandbox);
+const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, withTypography, removeDesign, readShape, readTypography, gridPlacement, tileIconMarkup, ICON_OPTIONS, validTileStyle, isAdvancedPage, compatibleVersion })", sandbox);
 assert.ok(registered.has("ha-frame-visual-editor"));
 assert.equal(sandbox.window.customCards[0].type, "ha-frame-visual-editor");
 assert.equal(Object.keys(editorApi.PRESETS).length, 14);
@@ -71,9 +71,30 @@ for (const template of editorApi.LAYOUT_TEMPLATES) {
   const page = editorApi.templatePage(template);
   assert.ok([2,3,4].includes(page.columns));
   assert.ok(page.cards.length <= page.columns * 3);
-  assert.ok(page.cards.every(t => t.entity_id === "" && ["metric","control","gauge","thermostat","light","cover"].includes(t.type)));
+  assert.ok(page.cards.every(t => t.entity_id === "" && ["metric","control","gauge","thermostat","light","cover","weather","graph","camera"].includes(t.type)));
   assert.ok(page.cards.every(t => t.min === 0 && t.max === 100));
 }
+
+const grid = editorApi.gridPlacement({columns:3,cards:[
+  {col_span:2,row_span:2},{col_span:1},{col_span:1},{col_span:2},{col_span:1}
+]});
+assert.equal(grid.rows, 3);
+assert.equal(grid.cells[0].w, 2);
+assert.equal(grid.cells[1].col, 2);
+assert.equal(grid.cells[3].row, 2);
+assert.throws(()=>editorApi.gridPlacement({columns:2,cards:[
+  {col_span:2},{col_span:2},{col_span:2},{col_span:2}
+]}), /Pas assez/);
+assert.ok(editorApi.ICON_OPTIONS.length >= 20);
+assert.match(editorApi.tileIconMarkup("home","metric","#ffffff"), /viewBox/);
+assert.equal(editorApi.tileIconMarkup("none","metric","#ffffff"), "");
+assert.match(editorApi.tileIconMarkup("","camera","#ffffff"), /svg/);
+assert.ok(editorApi.validTileStyle({background:"#abcdef",radius:12}));
+assert.ok(!editorApi.validTileStyle({background:"red"}));
+assert.ok(editorApi.isAdvancedPage({cards:[{type:"camera"}]}));
+assert.ok(!editorApi.isAdvancedPage({cards:[{type:"metric"}]}));
+assert.ok(editorApi.compatibleVersion("1.0.0"));
+assert.ok(!editorApi.compatibleVersion("0.9.0"));
 
 const copied = editorApi.clone({pages:[{cards:[{label:"A"}]}]});
 copied.pages[0].cards[0].label = "B";
@@ -122,6 +143,29 @@ instance._applyLayout("energy","add");
 instance._applyLayout("security","add");
 assert.equal(instance._config.pages.length, 4);
 assert.match(instance.lastMessage, /4 pages/);
+
+const preview = {clientWidth:640, innerHTML:"", style:"", setAttribute(name,value){this[name]=value;}};
+instance._hass = {states:{"weather.home":{state:"sunny",attributes:{temperature:20}}}};
+instance._frames = [{entry_id:"frame-1",online:true,version:"1.0.0"}];
+instance._frameId = "frame-1";
+instance._config.pages = [{title:"Caméras",columns:3,cards:[
+  {type:"camera",label:"Entrée",entity_id:"camera.entree",col_span:2,row_span:2,icon:"camera"},
+  {type:"weather",label:"Dehors",entity_id:"weather.home",icon:"sun"}
+]}];
+instance.shadowRoot = {querySelector(query){return query==="[data-preview]"?preview:null;}};
+instance._preview();
+assert.match(preview.innerHTML,/grid-column:1 \/ span 2/);
+assert.match(preview.innerHTML,/Aperçu MJPEG/);
+assert.match(preview.innerHTML,/tile-icon/);
+assert.match(preview.innerHTML,/20 °C/);
+assert.ok(!preview.innerHTML.includes("font-size:40px"));
+instance._config.pages[0].cards[0].icon="invalid";
+assert.match(instance._validate(),/Icône invalide/);
+instance._config.pages[0].cards[0].icon="camera";
+instance._frames[0].version="0.9.0";
+assert.match(instance._validate(),/APK Android/);
+instance._frames[0].version="1.0.0";
+assert.equal(instance._validate(),"");
 
 assert.match(src, /ha_frame\/editor\/list/);
 assert.match(src, /ha_frame\/editor\/get/);
