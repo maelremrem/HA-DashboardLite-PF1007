@@ -158,7 +158,7 @@ public final class MainActivity extends Activity implements HaClient.Listener {
 
     @Override public void onStatesChanged() {
         if (ambient != null) ambient.refresh();
-        dashboard.invalidate();
+        dashboard.refreshContext();
     }
 
     @Override public void onCommandError(String message) {
