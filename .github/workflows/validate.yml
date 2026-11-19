@@ -46,8 +46,6 @@ jobs:
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
       - name: Build debug APK
         run: bash scripts/build-fedora.sh
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
       - uses: actions/upload-artifact@v4
         with:
           name: HAFrame-PF1007-debug
