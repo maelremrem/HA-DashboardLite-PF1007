@@ -2,6 +2,8 @@ package dev.maelab.haframe;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Path;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -190,20 +192,29 @@ final class DashboardView extends View {
     }
 
     private int columns(FrameConfig.Page page) { return Math.max(2, Math.min(4, page.columns)); }
-    private int rows(FrameConfig.Page page) {
-        return Math.max(1, (page.cards.size() + columns(page) - 1) / columns(page));
-    }
     private float cardWidth(FrameConfig.Page page) {
         return (GRID_WIDTH - (columns(page) - 1) * CELL_GAP) / columns(page);
     }
     private float cardHeight(FrameConfig.Page page) {
-        return Math.min(183f, (GRID_HEIGHT - (rows(page) - 1) * CELL_GAP) / rows(page));
+        int rows = page.layout().usedRows;
+        return Math.min(183f, (GRID_HEIGHT - (rows - 1) * CELL_GAP) / rows);
+    }
+    private TileGrid.Cell tileCell(FrameConfig.Page page, int index) {
+        return page.layout().cells[index];
     }
     private float cardLeft(FrameConfig.Page page, int index) {
-        return GRID_X + (index % columns(page)) * (cardWidth(page) + CELL_GAP);
+        return GRID_X + tileCell(page, index).column * (cardWidth(page) + CELL_GAP);
     }
     private float cardTop(FrameConfig.Page page, int index) {
-        return GRID_Y + (index / columns(page)) * (cardHeight(page) + CELL_GAP);
+        return GRID_Y + tileCell(page, index).row * (cardHeight(page) + CELL_GAP);
+    }
+    private float tileWidth(FrameConfig.Page page, int index) {
+        return tileCell(page, index).columns * cardWidth(page) +
+            (tileCell(page, index).columns - 1) * CELL_GAP;
+    }
+    private float tileHeight(FrameConfig.Page page, int index) {
+        return tileCell(page, index).rows * cardHeight(page) +
+            (tileCell(page, index).rows - 1) * CELL_GAP;
     }
 
     private void drawNotification(Canvas canvas) {
@@ -237,6 +248,52 @@ final class DashboardView extends View {
         rect(canvas, x, y, Math.max(8, width * clamp(percent, 0, 100) / 100f), 12, 6, color);
     }
 
+    private static int customColor(String hex, int fallback) {
+        if (hex == null || hex.isEmpty()) return fallback;
+        return Color.parseColor(hex);
+    }
+
+    private void drawTrend(Canvas canvas, float[] samples, float x, float y,
+                           float width, float height, int color) {
+        if (samples.length < 2 || width <= 0 || height <= 0) return;
+        float low = samples[0], high = samples[0];
+        for (float sample : samples) {
+            low = Math.min(low, sample);
+            high = Math.max(high, sample);
+        }
+        if (high - low < 0.001f) { high += 1f; low -= 1f; }
+        Path path = new Path();
+        for (int i = 0; i < samples.length; i++) {
+            float px = x + width * i / (samples.length - 1);
+            float py = y + height * (1f - (samples[i] - low) / (high - low));
+            if (i == 0) path.moveTo(px, py);
+            else path.lineTo(px, py);
+        }
+        paint.setColor(color);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(4f);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        canvas.drawPath(path, paint);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    private static String weatherLabel(String condition) {
+        switch (condition) {
+            case "sunny": return "Ensoleillé";
+            case "clear-night": return "Ciel dégagé";
+            case "partlycloudy": return "Éclaircies";
+            case "cloudy": return "Nuageux";
+            case "rainy": return "Pluie";
+            case "pouring": return "Fortes pluies";
+            case "snowy": return "Neige";
+            case "snowy-rainy": return "Neige et pluie";
+            case "lightning": return "Orage";
+            case "fog": return "Brouillard";
+            case "windy": return "Vent";
+            default: return condition;
+        }
+    }
+
     private void drawCards(Canvas canvas, FrameConfig.Page page) {
         if (page.cards.isEmpty()) {
             text(canvas, "Cette page est vide", GRID_X + 18, GRID_Y + 75, 27, MUTED, false, 700);
@@ -246,39 +303,72 @@ final class DashboardView extends View {
         for (int i = 0; i < page.cards.size(); i++) {
             FrameConfig.Card card = page.cards.get(i);
             boolean metric = "metric".equals(card.type);
-            boolean actionable = !metric && !"gauge".equals(card.type);
+            boolean actionable = !metric && !"gauge".equals(card.type) &&
+                !"graph".equals(card.type) && !"weather".equals(card.type);
             String slot = metric ? ".metric-" + (++metricNumber) : ".control-" + (++controlNumber);
             float x = cardLeft(page, i), y = cardTop(page, i);
-            float w = cardWidth(page), h = cardHeight(page);
+            float w = tileWidth(page, i), h = tileHeight(page, i);
             HaClient.EntityState state = card.entityId.isEmpty() || client == null ? null : client.get(card.entityId);
             boolean valid = connected && state != null && !"unavailable".equals(state.state) && !"unknown".equals(state.state);
             boolean on = valid && ("on".equals(state.state) || "open".equals(state.state) || "playing".equals(state.state));
             boolean pressed = actionable && (touchedCard == i || feedbackCard == i);
             String category = "." + card.type;
             String modifier = pressed ? ".control.pressed" : on ? ".control.on" : category;
-            rect(canvas, x, y, w, h, theme.size(20, "border-radius", ".card", category, slot),
-                theme.color(pressed ? PANEL_PRESSED : on ? PANEL_ON : PANEL,
-                    "background-color", ".card", category, slot, modifier));
+            int background = theme.color(pressed ? PANEL_PRESSED : on ? PANEL_ON : PANEL,
+                "background-color", ".card", category, slot, modifier);
+            int foreground = customColor(card.foreground, theme.color(TEXT, "color", ".metric-value", slot));
+            int secondary = customColor(card.foreground, theme.color(MUTED, "color", ".metric-label", category, slot));
+            int accent = customColor(card.accent, theme.color(ACCENT, "color", ".accent"));
+            float radius = card.radius >= 0 ? card.radius :
+                theme.size(20, "border-radius", ".card", category, slot);
+            rect(canvas, x, y, w, h, radius, customColor(card.background, background));
+            canvas.save();
+            canvas.clipRect(x + 1, y + 1, x + w - 1, y + h - 1);
             text(canvas, card.label.isEmpty() ? card.entityId : card.label, x + 20, y + 39,
                 theme.size(20, "font-size", ".metric-label", category, slot),
-                theme.color(MUTED, "color", ".metric-label", category, slot), false, w - 40);
+                secondary, false, w - 40);
             String unavailable = card.entityId.isEmpty() ? "À configurer" : !connected ? "Hors ligne" : "En attente…";
             if (!valid) {
-                text(canvas, unavailable, x + 20, y + h - 27, 21, MUTED, true, w - 40);
+                text(canvas, unavailable, x + 20, y + h - 27, 21, secondary, true, w - 40);
+                canvas.restore();
                 continue;
             }
             if (metric) {
                 String value = state.state + (state.unit().isEmpty() ? "" : " " + state.unit());
                 text(canvas, value, x + 20, y + h - 26,
                     theme.size(34, "font-size", ".metric-value", slot),
-                    theme.color(TEXT, "color", ".metric-value", slot), true, w - 40);
+                    foreground, true, w - 40);
             } else if ("gauge".equals(card.type)) {
                 float value = parseNumber(state.state, Float.NaN);
-                if (!finite(value)) { text(canvas, "Non numérique", x + 20, y + h - 26, 20, MUTED, false, w - 40); continue; }
+                if (!finite(value)) { text(canvas, "Non numérique", x + 20, y + h - 26, 20, secondary, false, w - 40); canvas.restore(); continue; }
                 text(canvas, state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
                     x + 20, y + 94, 35, TEXT, true, w - 40);
                 float pct = 100f * (value - card.min) / (card.max - card.min);
-                bar(canvas, x + 20, y + h - 32, w - 40, pct, ACCENT);
+                bar(canvas, x + 20, y + h - 32, w - 40, pct, accent);
+            } else if ("weather".equals(card.type)) {
+                double temperature = state.attributes.optDouble("temperature", Double.NaN);
+                String summary = weatherLabel(state.state);
+                text(canvas, summary, x + 20, y + Math.min(85, h - 55), 23, secondary, false, w - 40);
+                if (!Double.isNaN(temperature) && !Double.isInfinite(temperature)) {
+                    text(canvas, Math.round(temperature) + "°C", x + 20, y + h - 26,
+                        Math.min(48, h * 0.27f), foreground, true, w - 40);
+                }
+                int humidity = state.attributes.optInt("humidity", -1);
+                if (humidity >= 0 && w > 320) {
+                    text(canvas, "Humidité " + humidity + "%", x + w - 198, y + h - 29,
+                        19, secondary, false, 175);
+                }
+            } else if ("graph".equals(card.type)) {
+                text(canvas, state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
+                    x + 20, y + 78, 28, foreground, true, w - 40);
+                float[] history = client == null ? new float[0] : client.recentSamples(card.entityId);
+                if (history.length < 2) {
+                    text(canvas, "Collecte des valeurs…", x + 20, y + h - 23, 18,
+                        secondary, false, w - 40);
+                } else {
+                    drawTrend(canvas, history, x + 20, y + 96,
+                        w - 40, Math.max(8, h - 118), accent);
+                }
             } else if ("thermostat".equals(card.type)) {
                 float temp = (float) state.attributes.optDouble("current_temperature", Float.NaN);
                 float target = (float) state.attributes.optDouble("temperature", Float.NaN);
@@ -298,12 +388,13 @@ final class DashboardView extends View {
                     : (float) state.attributes.optDouble("current_position", 0);
                 text(canvas, "light".equals(card.type) ? (on ? "Allumée" : "Éteinte") : state.state,
                     x + 20, y + 90, 23, TEXT, true, w - 40);
-                bar(canvas, x + 20, y + h - 34, w - 40, percent, ACCENT);
+                bar(canvas, x + 20, y + h - 34, w - 40, percent, accent);
             } else {
-                rect(canvas, x + 20, y + h - 36, 12, 12, 6, on ? ACCENT : 0xFF66768D);
+                rect(canvas, x + 20, y + h - 36, 12, 12, 6, on ? accent : 0xFF66768D);
                 text(canvas, "on".equals(state.state) ? "Allumé" : "off".equals(state.state) ? "Éteint" : state.state,
                     x + 46, y + h - 26, 21, MUTED, false, w - 60);
             }
+            canvas.restore();
         }
     }
 
@@ -313,7 +404,7 @@ final class DashboardView extends View {
         for (int i = 0; i < page.cards.size(); i++) {
             float left = cardLeft(page, i);
             float top = cardTop(page, i);
-            if (x >= left && x <= left + cardWidth(page) && y >= top && y <= top + cardHeight(page)) return i;
+            if (x >= left && x <= left + tileWidth(page, i) && y >= top && y <= top + tileHeight(page, i)) return i;
         }
         return -1;
     }
@@ -381,7 +472,8 @@ final class DashboardView extends View {
                 }
                 if (selected < 0 || selected != cardAt(x, y)) return true;
                 FrameConfig.Card card = config.pages.get(pageIndex).cards.get(selected);
-                if ("metric".equals(card.type) || "gauge".equals(card.type)) return true;
+                if ("metric".equals(card.type) || "gauge".equals(card.type) ||
+                    "weather".equals(card.type) || "graph".equals(card.type)) return true;
                 if (card.entityId.isEmpty()) { callbacks.settings(); return true; }
                 long now = SystemClock.elapsedRealtime();
                 if (card.entityId.equals(lastCommandId) && now - lastCommandAt < 700L) return true;
@@ -394,8 +486,8 @@ final class DashboardView extends View {
                 performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                 float cardX = cardLeft(config.pages.get(pageIndex), selected);
                 float cardY = cardTop(config.pages.get(pageIndex), selected);
-                float cw = cardWidth(config.pages.get(pageIndex));
-                float ch = cardHeight(config.pages.get(pageIndex));
+                float cw = tileWidth(config.pages.get(pageIndex), selected);
+                float ch = tileHeight(config.pages.get(pageIndex), selected);
                 if (("light".equals(card.type) || "cover".equals(card.type)) && y >= cardY + ch - 58) {
                     int percent = Math.round(100f * clamp((x - cardX - 20) / (cw - 40), 0, 1));
                     callbacks.level(card.entityId, percent);
