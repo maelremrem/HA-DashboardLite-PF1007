@@ -26,6 +26,15 @@ This release changes **only the HA integration**. The existing Android **v0.7 AP
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
+## V1.4 — Native Home Assistant MDI icons
+
+**HA Frame Studio v1.4.0** now uses the same `mdi:name` icons as Home Assistant, instead of a fixed set of 20 custom vector icons. Select an icon using the native Home Assistant icon picker (when available) or enter its `mdi:` name directly. The **Automatic** option follows the current Home Assistant entity icon in Studio's live preview; **none** hides the icon.
+
+- On save, Studio resolves the actual MDI SVG path provided by Home Assistant and stores only sanitized vector path data with the layout. The **Android v1.1.0** Canvas renderer draws those paths offline; no CDN, WebView, or font download.
+- Existing legacy icon selections are retained and migrated to MDI on save when the target frame supports Android v1.1.
+- Changes remain per-frame and require an explicit Save. Icons selected from MDI require Android v1.1.0 or newer, while existing layouts are backward-compatible.
+- The local on-device web editor preserves MDI names and cached paths; search and selection of new MDI icons happens inside Home Assistant Studio.
+
 ## V1.3 — Corrected Studio preview, native icons and camera widgets
 
 **Home Assistant integration 1.3.0 + Android APK 1.0.0** enable advanced dashboard design:
