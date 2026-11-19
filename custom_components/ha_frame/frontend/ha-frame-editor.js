@@ -78,25 +78,48 @@ const SHAPES = {
   soft: {label:"Arrondi", radius:28},
   bubble: {label:"Bulle", radius:36}
 };
+const TYPOGRAPHY = {
+  standard: {label:"Standard"},
+  compact: {label:"Compact",clock:32,heading:30,value:28},
+  large: {label:"Grande lisibilité",clock:52,heading:40,value:42}
+};
 const DESIGN_START = "/* HA Frame Studio design */";
 const DESIGN_END = "/* Fin HA Frame Studio design */";
 function removeDesign(css) {
   return String(css || "").replace(/\/\* HA Frame Studio design \*\/[\s\S]*?\/\* Fin HA Frame Studio design \*\//g, "").trim();
 }
+function readDesignBlock(css) {
+  const found = String(css || "").match(/\/\* HA Frame Studio design \*\/([\s\S]*?)\/\* Fin HA Frame Studio design \*\//);
+  return found ? found[1] : "";
+}
 function readShape(css) {
-  const block = String(css || "").match(/\/\* HA Frame Studio design \*\/([\s\S]*?)\/\* Fin HA Frame Studio design \*\//);
-  if (!block) return "standard";
-  const m = block[1].match(/\.card, \.settings \{ border-radius: (\d+)px; \}/);
+  const m = readDesignBlock(css).match(/\.card, \.settings \{ border-radius: (\d+)px; \}/);
   return Object.keys(SHAPES).find(k=>m && SHAPES[k].radius === Number(m[1])) || "standard";
 }
-function withShape(css, shape) {
-  const base = removeDesign(css);
-  if (shape === "standard") return base;
-  if (!SHAPES[shape]) throw new Error("Style inconnu");
-  const radius = SHAPES[shape].radius;
-  return [base, DESIGN_START, `.card, .settings { border-radius: ${radius}px; }`,
-    `.page-tab { border-radius: ${Math.round(radius/2)}px; }`, DESIGN_END].filter(Boolean).join("\n");
+function readTypography(css) {
+  const m = readDesignBlock(css).match(/\.clock \{ font-size: (\d+)px; \}/);
+  return Object.keys(TYPOGRAPHY).find(k=>m && TYPOGRAPHY[k].clock === Number(m[1])) || "standard";
 }
+function withDesign(css, shape, typography) {
+  if (!SHAPES[shape] || !TYPOGRAPHY[typography]) throw new Error("Design inconnu");
+  const base = removeDesign(css);
+  if (shape === "standard" && typography === "standard") return base;
+  const changes = [];
+  if (shape !== "standard") {
+    const radius = SHAPES[shape].radius;
+    changes.push(`.card, .settings { border-radius: ${radius}px; }`);
+    changes.push(`.page-tab { border-radius: ${Math.round(radius/2)}px; }`);
+  }
+  if (typography !== "standard") {
+    const t = TYPOGRAPHY[typography];
+    changes.push(`.clock { font-size: ${t.clock}px; }`);
+    changes.push(`.header { font-size: ${t.heading}px; }`);
+    changes.push(`.metric-value { font-size: ${t.value}px; }`);
+  }
+  return [base, DESIGN_START, ...changes, DESIGN_END].filter(Boolean).join("\n");
+}
+function withShape(css, shape) { return withDesign(css, shape, readTypography(css)); }
+function withTypography(css, typography) { return withDesign(css, readShape(css), typography); }
 
 const LAYOUT_TEMPLATES = [
   {id:"overview", name:"Vue générale", columns:3, tiles:[
@@ -466,6 +489,9 @@ class HaFrameVisualEditor extends HTMLElement {
         "<label class='field'>Design des tuiles<select data-bind='shape'>" +
         Object.entries(SHAPES).map(([id,p])=>option(id,p.label,readShape(this._config.custom_css))).join("") +
         "</select></label>" +
+        "<label class='field'>Typographie<select data-bind='typography'>" +
+        Object.entries(TYPOGRAPHY).map(([id,p])=>option(id,p.label,readTypography(this._config.custom_css))).join("") +
+        "</select></label>" +
         "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
     } else if (this._panel === "layouts") {
       html = "<div class='inspector-head'><strong>Modèles de disposition</strong></div>" +
@@ -539,8 +565,10 @@ class HaFrameVisualEditor extends HTMLElement {
       this._open();
       return;
     }
-    if (target.dataset.bind === "shape" && this._config) {
-      const next = withShape(this._config.custom_css, target.value);
+    if (["shape","typography"].includes(target.dataset.bind) && this._config) {
+      const next = target.dataset.bind === "shape"
+        ? withShape(this._config.custom_css, target.value)
+        : withTypography(this._config.custom_css, target.value);
       if (next.length > 12000) {
         this._message("CSS trop long pour modifier la forme", true); return;
       }
