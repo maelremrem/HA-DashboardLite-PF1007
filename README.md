@@ -2,6 +2,16 @@
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
 
+## Install from GitHub
+
+The Android APK and the Home Assistant integration are separate installs.
+
+- **Android / Fedora:** `git clone`, switch to the v0.7 branch, then run `bash scripts/build-fedora.sh`. Avoid `sudo` for the build.
+- **Home Assistant:** the integration is under `custom_components/ha_frame/`, with `hacs.json` for Marketplace/HACS support.
+- **Important:** Home Assistant 2026.11+ Marketplace requires a **public repository** with the integration files on its default branch or a compatible release. This repository is currently **private**, and v0.7 is on a test branch, so Marketplace installation cannot work yet. Use a private Git checkout as documented until those conditions change.
+
+See [install from GitHub / Marketplace](docs/marketplace-installation.md) for both options.
+
 ## V0.7 — Specialized cards, ambient light and Home Assistant integration
 
 - Native Canvas **gauge**, **thermostat**, **light dimmer**, and **cover position** cards in addition to metrics and command buttons.
@@ -118,7 +128,7 @@ Set `ANDROID_HOME` to the SDK path (or `ANDROID_SDK_ROOT`). The helper automatic
 
 ```bash
 cd HAFrame-PF1007
-./scripts/build-fedora.sh
+bash scripts/build-fedora.sh
 ```
 
 This downloads official Gradle 8.7, verifies its published SHA-256, then runs `assembleDebug`. Alternatively open the project in Android Studio and build an APK. Android Gradle Plugin 8.6.1 requires JDK 17.
