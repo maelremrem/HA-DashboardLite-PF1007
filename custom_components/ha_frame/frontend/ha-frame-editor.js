@@ -1557,6 +1557,46 @@ class HaFrameVisualEditor extends HTMLElement {
     link.remove();
     URL.revokeObjectURL(url);
   }
+  async _refreshDiagnostics() {
+    const frameId=this._frameId;
+    try {
+      const result=await this._hass.callWS({type:"ha_frame/editor/diagnostics",entry_id:frameId});
+      if (frameId===this._frameId) {
+        this._deviceStatus=result.diagnostics||{};
+        if (["device","updates"].includes(this._panel)) this._render();
+      }
+    } catch(error) {
+      this._message("Diagnostic indisponible : "+(error.message||error),true);
+    }
+  }
+  async _deviceAction(action) {
+    if (action==="diagnostics-refresh") return this._refreshDiagnostics();
+    if (action==="capture") {
+      const frameId=this._frameId;
+      try {
+        const response=await this._hass.callWS({type:"ha_frame/editor/screenshot",entry_id:frameId});
+        if (frameId!==this._frameId) return;
+        const data=response.data||"";
+        if (response.format!=="image/jpeg" || data.length>320000 ||
+            !/^[A-Za-z0-9+/=]+$/.test(data)) throw new Error("Capture non valide");
+        this._screenshot=data;
+        this._render();
+      } catch(error) {
+        this._message("Capture indisponible : "+(error.message||error),true);
+      }
+      return;
+    }
+    if (action==="reload-dashboard") {
+      if (!confirm("Recharger l’affichage de ce cadre ? Le cadre sera brièvement indisponible.")) return;
+      try {
+        await this._hass.callWS({type:"ha_frame/editor/reload",
+          entry_id:this._frameId,confirmation:"reload_dashboard"});
+        this._message("Demande de rechargement envoyée",false);
+      } catch(error) {
+        this._message("Rechargement refusé : "+(error.message||error),true);
+      }
+    }
+  }
   async _libraryAction(action) {
     try {
       if (action === "import-layout") {
@@ -1608,6 +1648,13 @@ class HaFrameVisualEditor extends HTMLElement {
     if (action === "profiles") {
       this._panel="profiles";this._tile=-1;
       await this._loadLibrary();this._render();return;
+    }
+    if (action==="device" || action==="updates") {
+      this._panel=action;this._tile=-1;
+      this._render();await this._refreshDiagnostics();return;
+    }
+    if (["diagnostics-refresh","capture","reload-dashboard"].includes(action)) {
+      return this._deviceAction(action);
     }
     if (["profile-save","profile-apply","profile-delete","snapshot-apply",
       "export-layout","import-layout"].includes(action)) return this._libraryAction(action);
