@@ -18,7 +18,7 @@ const sandbox = {
   console
 };
 
-const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, removeDesign, readShape })", sandbox);
+const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, withTypography, removeDesign, readShape, readTypography })", sandbox);
 assert.ok(registered.has("ha-frame-visual-editor"));
 assert.equal(sandbox.window.customCards[0].type, "ha-frame-visual-editor");
 assert.equal(Object.keys(editorApi.PRESETS).length, 14);
@@ -60,6 +60,12 @@ assert.equal(editorApi.removeDesign(changed), editorApi.PRESETS.forest);
 assert.equal(editorApi.nativeCss(changed)[".card"]["border-radius"], "36px");
 assert.equal(editorApi.withShape(changed, "square").match(/Studio design/g).length, 2);
 assert.equal(editorApi.nativeCss(editorApi.withShape(changed, "square"))[".card"]["border-radius"], "4px");
+const large = editorApi.withTypography(editorApi.withShape(changed, "square"), "large");
+assert.equal(editorApi.readTypography(large), "large");
+assert.equal(editorApi.readShape(large), "square");
+assert.equal(editorApi.nativeCss(large)[".clock"]["font-size"], "52px");
+assert.equal(editorApi.withTypography(large, "standard").match(/Studio design/g).length, 2);
+assert.equal(editorApi.withShape(editorApi.withTypography(changed, "standard"), "standard"), editorApi.PRESETS.forest);
 for (const template of editorApi.LAYOUT_TEMPLATES) {
   const page = editorApi.templatePage(template);
   assert.ok([2,3,4].includes(page.columns));
