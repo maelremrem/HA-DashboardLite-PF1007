@@ -26,6 +26,12 @@ This release changes **only the HA integration**. The existing Android **v0.7 AP
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
+## V0.9 — Android device diagnostics
+
+The Home Assistant **Diagnostic** panel now exposes the running Android APK version, Android OS version, device uptime since boot, Wi-Fi SSID, IP address, RSSI (dBm), estimated signal quality (%), link rate (Mbit/s), frequency (MHz), and connection status. The app's reported version is read at runtime, rather than hardcoded. Data comes from the paired frame's existing authenticated LAN endpoint and refreshes approximately every 30 seconds.
+
+**Both updates are required:** Android APK v0.9.0 and Home Assistant integration v0.9.0. Diagnostics appear as unavailable until the newer APK is running. Existing pairing and dashboard settings remain intact. See [Device diagnostics](docs/device-diagnostics.md).
+
 ## V0.7 — Specialized cards, ambient light and Home Assistant integration
 
 - Native Canvas **gauge**, **thermostat**, **light dimmer**, and **cover position** cards in addition to metrics and command buttons.
