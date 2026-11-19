@@ -417,6 +417,7 @@ class HaFrameVisualEditor extends HTMLElement {
     this._historyGroup = "";
     this._historyGroupAt = 0;
     this._styleClipboard = null;
+    this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
     this.shadowRoot.addEventListener("input", (event) => this._input(event));
@@ -556,11 +557,17 @@ class HaFrameVisualEditor extends HTMLElement {
     } finally { this._loading = false; }
   }
   async _open() {
+    const frameId = this._frameId;
+    const requestId = (this._loadSequence || 0) + 1;
+    this._loadSequence = requestId;
     this._config = null;
+    this._history = [];
+    this._historyIndex = -1;
     this._revision = "";
     this.shadowRoot.innerHTML = "<style>" + STYLE + "</style><ha-card><div class='empty'>Chargement de la configuration du cadre…</div></ha-card>";
     try {
-      const response = await this._hass.callWS({type:"ha_frame/editor/get", entry_id:this._frameId});
+      const response = await this._hass.callWS({type:"ha_frame/editor/get", entry_id:frameId});
+      if (requestId !== this._loadSequence || frameId !== this._frameId) return;
       this._config = clone(response.config);
       this._revision = response.revision;
       this._page = 0;
@@ -570,6 +577,7 @@ class HaFrameVisualEditor extends HTMLElement {
       this._message("", false);
       this._render();
     } catch (error) {
+      if (requestId !== this._loadSequence || frameId !== this._frameId) return;
       this._message("Impossible de charger ce cadre : " + (error.message || error), true);
       this.shadowRoot.innerHTML = "<style>" + STYLE + "</style><ha-card><div class='top'><div class='heading'>Cadre indisponible</div><div class='row toolbar'><select data-control='frame'>" +
         this._frameOptions() + "</select><button data-action='reload'>Réessayer</button></div></div><div class='empty'>" +
@@ -888,6 +896,7 @@ class HaFrameVisualEditor extends HTMLElement {
     }
   }
   _click(event) {
+    if (this._busy) return;
     const resize = event.target.closest("[data-resize]");
     if (resize) {
       event.preventDefault();
@@ -917,6 +926,10 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (this._busy) {
+      if (target.dataset.control === "frame") target.value = this._frameId;
+      return;
+    }
     if (target.dataset.control === "frame") {
       const next = target.value, previous = this._frameId;
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) {
@@ -946,6 +959,7 @@ class HaFrameVisualEditor extends HTMLElement {
     }
   }
   _input(event) {
+    if (this._busy) return;
     const target = event.target, bind = target.dataset.bind;
     if (!bind || bind === "preset" || !this._config) return;
     const page = this._pageObject(), tile = this._tileObject();
@@ -1205,6 +1219,7 @@ class HaFrameVisualEditor extends HTMLElement {
     } finally {this._busy = false;}
   }
   async _action(action) {
+    if (this._busy) return;
     if (!this._config) {
       if (action === "reload") return this._open();
       return;
