@@ -898,6 +898,7 @@ class HaFrameVisualEditor extends HTMLElement {
       if (![2,3,4].includes(page.columns) || page.cards.length > page.columns * 3) return "Trop de tuiles pour la grille";
       try { gridPlacement(page); }
       catch (error) { return error.message; }
+      if (page.cards.filter(tile=>tile.type==="camera").length > 1) return "Une seule caméra par page (utilise plusieurs pages)";
       for (const tile of page.cards) {
         if (!TYPES.some(([type])=>type===tile.type)) return "Type de tuile invalide";
         if (tile.icon && !ICON_OPTIONS.some(([id])=>id===tile.icon)) return "Icône invalide";
