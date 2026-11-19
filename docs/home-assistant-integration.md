@@ -38,6 +38,10 @@ data:
 
 The PF1007 shows a native popup for 12 seconds and temporarily leaves night-blackout mode. An ordinary Android notification is also posted. The display does not become physically powered off.
 
+## Customize the dashboard from Home Assistant (integration v0.8)
+
+Open **Settings → Devices & services → HA Frame PF1007 → Configure** to edit the dashboard title, choose a built-in theme, write supported native Canvas CSS, and add/remove/move pages and tiles using searchable Home Assistant entity selectors. The **Android v0.7 APK already supports this**; no new Android build is needed. See [Editor guide](home-assistant-editor.md).
+
 ## Configure the display from Home Assistant
 
 The switch, number, time and text entities expose night settings and brightness without opening the frame's web editor. The screen can be awakened with the button entity. All values can also be set by HA automations.
@@ -58,7 +62,7 @@ data:
     ]}]
 ```
 
-The action uses the same JSON layout as the onboard editor. It does not expose the HA LLA token. Visual drag/drop page editing is **still available only in the optional local web editor (port 8765)**; Home Assistant configuration uses native entities and the `set_dashboard` action instead.
+The action uses the same JSON layout as the onboard editor. It does not expose the HA LLA token. The visual web editor on the frame (port 8765) remains optional. The new Home Assistant Configure wizard handles the common layout and theme edits using menus and up/down actions; the `set_dashboard` action remains useful for automation and bulk JSON changes.
 
 ## Night mode details
 
