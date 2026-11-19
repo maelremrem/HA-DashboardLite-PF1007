@@ -906,8 +906,9 @@ class HaFrameVisualEditor extends HTMLElement {
         if (tile.type === "weather" && tile.entity_id && !tile.entity_id.startsWith("weather.")) return "Choisir une entité weather.*";
         if (tile.label.length > 48) return "Titre de tuile trop long";
         if (tile.entity_id && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(tile.entity_id)) return "Entité invalide : " + tile.entity_id;
-        if (!Number.isFinite(Number(tile.min)) || !Number.isFinite(Number(tile.max)) ||
-            Number(tile.max) <= Number(tile.min)) return "Plage de jauge invalide";
+        const lower = Number(tile.min ?? 0), upper = Number(tile.max ?? 100);
+        if (!Number.isFinite(lower) || !Number.isFinite(upper) ||
+            upper <= lower || upper-lower > 1000000) return "Plage de jauge invalide";
       }
     }
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
