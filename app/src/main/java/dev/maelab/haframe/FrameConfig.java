@@ -136,9 +136,9 @@ final class FrameConfig {
         String source = slideshow.optString("source","local");
         String entity = slideshow.optString("camera_entity","");
         if (idle < 30 || idle > 3600 || interval < 5 || interval > 300 ||
-            !("local".equals(source) || "camera".equals(source)) ||
-            (!entity.isEmpty() && !entity.matches("camera\\.[a-z0-9_]+")) ||
-            ("camera".equals(source) && entity.isEmpty())) {
+            !("local".equals(source) || "camera".equals(source) || "image".equals(source)) ||
+            (!entity.isEmpty() && !entity.matches("(?:camera|image)\\.[a-z0-9_]+")) ||
+            (!"local".equals(source) && entity.isEmpty())) {
             throw new IllegalArgumentException("Invalid slideshow source or timing");
         }
         this.slideshow = new JSONObject(slideshow.toString());
