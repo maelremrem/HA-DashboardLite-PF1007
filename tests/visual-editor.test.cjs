@@ -15,6 +15,7 @@ const sandbox = {
     get: (name) => registered.get(name)
   },
   window: { customCards: [] },
+  confirm: () => true,
   console
 };
 
@@ -77,6 +78,50 @@ for (const template of editorApi.LAYOUT_TEMPLATES) {
 const copied = editorApi.clone({pages:[{cards:[{label:"A"}]}]});
 copied.pages[0].cards[0].label = "B";
 assert.equal(editorApi.clone({pages:[{cards:[{label:"A"}]}]}).pages[0].cards[0].label,"A");
+
+// Template actions remain in-memory until an explicit save.
+const Editor = registered.get("ha-frame-visual-editor");
+const instance = Object.create(Editor.prototype);
+instance._config = {
+  dashboard_title: "Maison", custom_css: "",
+  pages: [{ title: "Origine", columns: 2, cards: [{type:"metric",label:"T",entity_id:"sensor.test",min:0,max:100}] }]
+};
+instance._page = 0;
+instance._tile = -1;
+instance._panel = "page";
+instance._dirty = false;
+instance._mark = () => { instance._dirty = true; };
+instance._render = () => {};
+instance._message = (msg) => { instance.lastMessage = msg; };
+
+instance._applyLayout("overview", "add");
+assert.equal(instance._config.pages.length, 2);
+assert.equal(instance._config.pages[0].cards[0].entity_id, "sensor.test");
+assert.equal(instance._config.pages[1].cards.length, 6);
+assert.ok(instance._config.pages[1].cards.every(x=>x.entity_id===""));
+assert.equal(instance._dirty, true);
+
+const beforeReplace = JSON.stringify(instance._config.pages[1]);
+sandbox.confirm = () => false;
+instance._applyLayout("dense", "replace");
+assert.equal(JSON.stringify(instance._config.pages[1]), beforeReplace);
+sandbox.confirm = () => true;
+instance._applyLayout("dense", "replace");
+assert.equal(instance._config.pages[1].cards.length, 12);
+assert.equal(instance._config.pages[1].columns, 4);
+
+instance._config.custom_css = editorApi.PRESETS.forest;
+sandbox.confirm = () => false;
+instance._applyPreset("rose");
+assert.equal(instance._config.custom_css, editorApi.PRESETS.forest);
+sandbox.confirm = () => true;
+instance._applyPreset("rose");
+assert.equal(instance._config.custom_css, editorApi.PRESETS.rose);
+instance._applyLayout("climate","add");
+instance._applyLayout("energy","add");
+instance._applyLayout("security","add");
+assert.equal(instance._config.pages.length, 4);
+assert.match(instance.lastMessage, /4 pages/);
 
 assert.match(src, /ha_frame\/editor\/list/);
 assert.match(src, /ha_frame\/editor\/get/);
