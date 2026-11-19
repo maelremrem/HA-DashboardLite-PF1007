@@ -159,6 +159,8 @@ def validate_pages(pages: list[dict]) -> None:
                 raise ValueError("Invalid gauge range") from exc
             if not all(map(isfinite, (minimum, maximum))) or maximum <= minimum or maximum - minimum > 1_000_000:
                 raise ValueError("Invalid gauge range")
+        if sum(card.get("type") == "camera" for card in cards) > 1:
+            raise ValueError("Only one camera per page is supported")
         card_grid(page)
 
 
