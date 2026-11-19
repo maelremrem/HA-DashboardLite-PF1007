@@ -928,7 +928,9 @@ class HaFrameVisualEditor extends HTMLElement {
         wifi_link_speed_mbps:"Vitesse réseau (Mbit/s)",
         wifi_frequency_mhz:"Fréquence (MHz)", sleeping:"Veille",
         effective_brightness:"Luminosité", lux:"Éclairement", lux_source:"Source lux",
-        signing_cert_sha256:"Empreinte de signature APK"
+        signing_cert_sha256:"Empreinte de signature APK",
+        heap_used_mb:"Mémoire utilisée (Mo)",heap_max_mb:"Mémoire maximale (Mo)",
+        battery_temperature_c:"Température batterie (°C)",battery_percent:"Batterie (%)"
       };
       const info = Object.keys(names).filter(key=>values[key]!=null).map(key=>
         "<div class='diagnostic-row'><span>" + esc(names[key]) + "</span><strong>" +
