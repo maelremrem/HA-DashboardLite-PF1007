@@ -65,6 +65,8 @@ final class DashboardView extends View {
     private String fullscreenCamera = "";
     private long manualPageUntil;
     private long pressedAt;
+    private int draggingSlider = -1;
+    private float dragSliderX;
     private final PhotoSlideshow photos;
     private boolean photoActive;
     private long lastInteraction = SystemClock.elapsedRealtime();
@@ -609,6 +611,9 @@ final class DashboardView extends View {
                     : (float) state.attributes.optDouble("current_position", 0);
                 text(canvas, "light".equals(card.type) ? (on ? "Allumée" : "Éteinte") : state.state,
                     x + 20, y + 90, 23, TEXT, true, w - 40);
+                if (draggingSlider == i) {
+                    percent = 100f * clamp((dragSliderX - x - 20) / (w - 40), 0f, 1f);
+                }
                 bar(canvas, x + 20, y + h - 34, w - 40, percent, accent);
             } else {
                 rect(canvas, x + 20, y + h - 36, 12, 12, 6, on ? accent : 0xFF66768D);
@@ -673,19 +678,49 @@ final class DashboardView extends View {
                 startX = x;
                 startY = y;
                 touchedCard = cardAt(x, y);
+                draggingSlider = -1;
+                if (touchedCard >= 0 && !config.pages.isEmpty()) {
+                    FrameConfig.Page visible = config.pages.get(pageIndex);
+                    FrameConfig.Card selected = visible.cards.get(touchedCard);
+                    if (("light".equals(selected.type) || "cover".equals(selected.type)) &&
+                        y >= cardTop(visible,touchedCard) + tileHeight(visible,touchedCard) - 58) {
+                        draggingSlider=touchedCard;
+                        dragSliderX=x;
+                    }
+                }
                 invalidate();
                 return true;
             case MotionEvent.ACTION_MOVE:
+                if (draggingSlider >= 0) {
+                    dragSliderX=x;
+                    invalidate();
+                    return true;
+                }
                 if (Math.abs(x - startX) > 26 || Math.abs(y - startY) > 26) {
                     touchedCard = -1;
                     invalidate();
                 }
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                draggingSlider = -1;
                 touchedCard = -1;
                 invalidate();
                 return true;
             case MotionEvent.ACTION_UP:
+                if (draggingSlider >= 0 && !config.pages.isEmpty()) {
+                    int selected = draggingSlider;
+                    draggingSlider = -1;
+                    touchedCard = -1;
+                    FrameConfig.Page visible = config.pages.get(pageIndex);
+                    FrameConfig.Card card = visible.cards.get(selected);
+                    float left = cardLeft(visible,selected);
+                    float width = tileWidth(visible,selected);
+                    int pct = Math.round(100f * clamp((x-left-20)/(width-40),0,1));
+                    if (callbacks != null && !card.entityId.isEmpty()) callbacks.level(card.entityId,pct);
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    invalidate();
+                    return true;
+                }
                 if (notificationUntil > SystemClock.elapsedRealtime() &&
                     x >= 170 && x <= 1110 && y >= 235 && y <= 565) {
                     notificationUntil = 0;
