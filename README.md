@@ -1,4 +1,4 @@
-# HA Frame — PF1007 native dashboard (Android v0.7 / HA integration v0.8)
+# HA Frame — PF1007 native dashboard (Android v1.0.0 / HA integration v1.3.0)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
 
@@ -25,6 +25,20 @@ The Home Assistant integration now exposes a **Configure** wizard that edits the
 This release changes **only the HA integration**. The existing Android **v0.7 APK** continues to work; stored HA credentials and brightness/night settings are unchanged. The editor is a guided native Home Assistant form (up/down reordering, **not drag-and-drop**).
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
+
+## V1.3 — Corrected Studio preview, native icons and camera widgets
+
+**Home Assistant integration 1.3.0 + Android APK 1.0.0** enable advanced dashboard design:
+
+- Canvas-accurate **1280 × 800 preview** in Studio (fixes clipped/overlapping texts when the editor is smaller than the device).
+- 20 built-in **vector icons**, per-tile colors and corner radii; automatic icons by widget type.
+- Variable tile sizes: span 1–4 columns and 1–2 rows with collision checks on Android, in HA and Studio.
+- Native `weather` and numeric `graph` widgets. Graphs show up to 24 recent value changes since connection (not persistent history).
+- Native `camera` widget for Home Assistant `camera.*` entities, using authenticated MJPEG still-stream (approximately **1 fps**, with JPEG snapshot fallback). Only the first camera widget on the active page streams; sound, raw RTSP/HLS URLs, WebRTC and multiple simultaneous streams are **not implemented** to preserve the Android 6 frame's resources.
+- Additional Studio templates for weather/home and energy/trends, plus icon, size and tile style controls.
+- The local Android web config editor preserves and edits icon and tile-span settings.
+
+**Upgrade order:** install the Android APK 1.0.0 (`adb install -r`, retaining app data), then update the Home Assistant integration to 1.3.0 via HACS and restart HA. Previous dashboards remain valid. Do not save advanced cards to a frame still using APK 0.9.0.
 
 ## V1.2 — Theme gallery and layout design in Studio
 
