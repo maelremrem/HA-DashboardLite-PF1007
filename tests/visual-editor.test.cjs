@@ -18,10 +18,10 @@ const sandbox = {
   console
 };
 
-const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS })", sandbox);
+const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, removeDesign, readShape })", sandbox);
 assert.ok(registered.has("ha-frame-visual-editor"));
 assert.equal(sandbox.window.customCards[0].type, "ha-frame-visual-editor");
-assert.equal(Object.keys(editorApi.PRESETS).length, 4);
+assert.equal(Object.keys(editorApi.PRESETS).length, 14);
 assert.equal(editorApi.esc('<script type="x">&</script>'),
   "&lt;script type=&quot;x&quot;&gt;&amp;&lt;/script&gt;");
 
@@ -32,6 +32,41 @@ assert.equal(styles[".accent"].color, "#58d5e7");
 
 const invalid = editorApi.nativeCss("body{background-image:url(https://evil.example/img)}");
 assert.equal(invalid.body, undefined);
+
+for (const [id, css] of Object.entries(editorApi.PRESETS)) {
+  assert.ok(css.length <= 12000, id);
+  const allowed = new Set([
+    ":root", "body", ".header", ".subtitle", ".clock", ".date", ".status",
+    ".settings", ".metric", ".metric-label", ".metric-value", ".control",
+    ".control-label", ".control-state", ".control.on", ".control.pressed",
+    ".card", ".page-tab", ".page-tab.active", ".accent"
+  ]);
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  let pos = 0;
+  for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    assert.equal(clean.slice(pos, m.index).trim(), "", id);
+    pos = m.index + m[0].length;
+    for (const selector of m[1].split(",")) assert.ok(allowed.has(selector.trim()), id + " " + selector);
+    for (const line of m[2].split(";").filter(x => x.trim())) {
+      assert.match(line.trim(), /^(--accent|color|background-color|border-radius|font-size|font-weight):/);
+    }
+  }
+  assert.equal(clean.slice(pos).trim(), "", id);
+}
+assert.equal(Object.keys(editorApi.PALETTE_THEMES).length, 10);
+const changed = editorApi.withShape(editorApi.PRESETS.forest, "bubble");
+assert.equal(editorApi.readShape(changed), "bubble");
+assert.equal(editorApi.removeDesign(changed), editorApi.PRESETS.forest);
+assert.equal(editorApi.nativeCss(changed)[".card"]["border-radius"], "36px");
+assert.equal(editorApi.withShape(changed, "square").match(/Studio design/g).length, 2);
+assert.equal(editorApi.nativeCss(editorApi.withShape(changed, "square"))[".card"]["border-radius"], "4px");
+for (const template of editorApi.LAYOUT_TEMPLATES) {
+  const page = editorApi.templatePage(template);
+  assert.ok([2,3,4].includes(page.columns));
+  assert.ok(page.cards.length <= page.columns * 3);
+  assert.ok(page.cards.every(t => t.entity_id === "" && ["metric","control","gauge","thermostat","light","cover"].includes(t.type)));
+  assert.ok(page.cards.every(t => t.min === 0 && t.max === 100));
+}
 
 const copied = editorApi.clone({pages:[{cards:[{label:"A"}]}]});
 copied.pages[0].cards[0].label = "B";
