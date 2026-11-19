@@ -306,6 +306,8 @@ const STYLE = [
   ".tile-value{flex:0 1 auto;font-size:clamp(11px,2.5cqw,34px);line-height:1.1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".tile-hint{flex:0 0 auto;font-size:clamp(7px,1.15cqw,15px);line-height:1;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".tile-icon{position:absolute;top:8%;right:6%;width:clamp(12px,2.2cqw,28px);height:clamp(12px,2.2cqw,28px);pointer-events:none}",
+  ".icon-info{padding:8px 0 14px;align-items:center}.icon-info ha-icon{--mdc-icon-size:32px}",
+  "ha-icon-picker{display:block;margin:4px 0 12px}",
   ".tile-camera{flex:1;display:grid;place-items:center;text-align:center;min-height:0;margin:1cqw 0;background:#020911;border-radius:6px;font-size:clamp(8px,1.3cqw,16px);opacity:.9;position:relative;overflow:hidden}",
   ".camera-dot{position:absolute;top:7px;left:8px;font-size:clamp(7px,.95cqw,12px);color:#ff7171}",
   ".tile-graph{width:100%;height:36%;min-height:10px;flex:1 1 auto;overflow:hidden}.tile-graph polyline{fill:none;stroke:currentColor;stroke-width:3;vector-effect:non-scaling-stroke}",
@@ -605,7 +607,7 @@ class HaFrameVisualEditor extends HTMLElement {
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
       const cell = layout.cells[i];
-      const icon = tileIconMarkup(tile.icon || "", tile.type, accent);
+      const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
       const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
         "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
       return "<div class='screen-tile" + (this._tile===i?" selected":"") +
@@ -720,8 +722,23 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type === "gauge" ? "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
           esc(tile.max) + "'></label></div>" : "") +
-        "<label class='field'>Icône<select data-bind='card-icon'>" +
-        ICON_OPTIONS.map(([id,name])=>option(id,name,tile.icon || "")).join("") + "</select></label>" +
+        "<div class='inspector-head'><strong>Icône Home Assistant</strong></div>" +
+        "<label class='field'>Icône MDI (vide = icône de l’entité)<input data-bind='card-icon' " +
+        "list='ha-frame-mdi' maxlength='96' placeholder='mdi:lightbulb' value='" +
+        esc(mdiIconName(tile.icon || "") === "none" ? "none" : mdiIconName(tile.icon || "")) +
+        "'></label><datalist id='ha-frame-mdi'>" +
+        [...new Set([...POPULAR_MDI, ...Object.values(this._hass && this._hass.states || {})
+          .map(entity=>entity.attributes && entity.attributes.icon).filter(icon=>MDI_REGEX.test(icon||""))])]
+          .map(icon=>"<option value='" + esc(icon) + "'></option>").join("") + "</datalist>" +
+        (customElements.get("ha-icon-picker")
+          ? "<ha-icon-picker data-ha-icon-picker label='Rechercher une icône MDI' value='" +
+            esc(MDI_REGEX.test(mdiIconName(tile.icon||"")) ? mdiIconName(tile.icon||"") : "") +
+            "'></ha-icon-picker>"
+          : "") +
+        "<div class='row icon-info'><ha-icon data-icon-preview icon='" +
+        esc(mdiIconName(tile.icon||"") === "none" ? "" :
+          mdiIconName(tile.icon||"") || tileAutoIcon(tile,this._hass)) +
+        "'></ha-icon><span class='muted'>Utilise mdi:nom, none pour masquer, ou vide pour automatique.</span></div>" +
         "<div class='row'><label class='field' style='flex:1'>Largeur<select data-bind='card-colspan'>" +
         Array.from({length:page.columns},(_,i)=>option(i+1,(i+1)+" colonne"+(i?"s":""),tile.col_span||1)).join("") +
         "</select></label><label class='field' style='flex:1'>Hauteur<select data-bind='card-rowspan'>" +
@@ -736,6 +753,21 @@ class HaFrameVisualEditor extends HTMLElement {
         "<button data-action='delete-tile' class='danger'>Supprimer</button></div>";
     }
     target.innerHTML = html;
+    const picker = target.querySelector("[data-ha-icon-picker]");
+    if (picker) {
+      picker.suggestedIcons = POPULAR_MDI;
+      picker.addEventListener("value-changed", event => {
+        const next = event.detail && event.detail.value || "";
+        if (next && !MDI_REGEX.test(next)) return;
+        const card = this._tileObject();
+        if (!card) return;
+        card.icon = next;
+        delete card.icon_path;
+        this._mark();
+        this._inspector();
+        this._preview();
+      });
+    }
   }
   _click(event) {
     const tile = event.target.closest("[data-tile]");
@@ -811,7 +843,10 @@ class HaFrameVisualEditor extends HTMLElement {
       if (bind === "card-entity") tile.entity_id = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
-      if (bind === "card-icon") tile.icon = target.value;
+      if (bind === "card-icon") {
+        tile.icon = target.value.trim().toLowerCase();
+        delete tile.icon_path;
+      }
       if (bind === "card-colspan" || bind === "card-rowspan") {
         const key = bind === "card-colspan" ? "col_span" : "row_span";
         const previous = tile[key] || 1;
@@ -905,7 +940,9 @@ class HaFrameVisualEditor extends HTMLElement {
       if (page.cards.filter(tile=>tile.type==="camera").length > 1) return "Une seule caméra par page (utilise plusieurs pages)";
       for (const tile of page.cards) {
         if (!TYPES.some(([type])=>type===tile.type)) return "Type de tuile invalide";
-        if (tile.icon && !ICON_OPTIONS.some(([id])=>id===tile.icon)) return "Icône invalide";
+        if (tile.icon && tile.icon !== "none" && !MDI_REGEX.test(mdiIconName(tile.icon))) {
+          return "Icône invalide : utilise mdi:nom-icone";
+        }
         if (tile.style && !validTileStyle(tile.style)) return "Style de tuile invalide";
         if (tile.type === "camera" && tile.entity_id && !tile.entity_id.startsWith("camera.")) return "Choisir une entité camera.*";
         if (tile.type === "weather" && tile.entity_id && !tile.entity_id.startsWith("weather.")) return "Choisir une entité weather.*";
