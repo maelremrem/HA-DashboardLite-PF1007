@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HA Frame · Configuration</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="identity"><span class="symbol">▣</span><div><strong>HA Frame</strong><small>Configuration du cadre PF1007</small></div></div>
+      <div class="timer">Arrêt automatique dans <b id="timer">—</b></div>
+    </header>
+    <section id="login" class="login panel hidden">
+      <p class="eyebrow">SESSION PRIVÉE</p>
+      <h1>Connecter le cadre</h1>
+      <p>Saisis le code à six chiffres affiché dans les réglages de HA Frame.</p>
+      <form id="loginForm">
+        <label for="pin">Code d'accès</label>
+        <input type="text" id="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="000000">
+        <button type="submit" class="primary">Se connecter</button>
+      </form>
+      <p id="loginError" class="error" role="alert"></p>
+    </section>
+    <section id="editor" class="hidden">
+      <div class="intro"><div><p class="eyebrow">TABLEAU DE BORD</p><h1>Personnaliser l'écran</h1><p>Associe tes capteurs et commandes par recherche, sans connaître leurs identifiants.</p></div><span class="chip" id="entityCount">Entités Home Assistant</span></div>
+      <section class="panel connection">
+        <h2>Connexion Home Assistant</h2>
+        <div class="fields">
+          <div><label for="url">Adresse du serveur</label><input type="url" id="url" placeholder="http://192.168.1.10:8123" spellcheck="false"></div>
+          <div><label for="token">Nouveau token (facultatif)</label><input id="token" type="password" autocomplete="new-password" placeholder="Laisser vide pour conserver le token"></div>
+        </div>
+        <p id="tokenStatus" class="muted"></p>
+        <p class="warning">Cette interface fonctionne en HTTP local : n'envoie un nouveau token que sur un Wi-Fi de confiance, ou privilégie les réglages directement sur le cadre.</p>
+      </section>
+      <section class="blocks"><h2>Capteurs <span>3 cartes</span></h2><div id="metrics" class="tileGrid"></div></section>
+      <section class="blocks"><h2>Commandes <span>6 boutons tactiles</span></h2><div id="controls" class="tileGrid"></div></section>
+      <div class="bottom"><span id="message" aria-live="polite">Les modifications sont appliquées après retour au dashboard sur le cadre.</span><div><button id="reloadEntities" type="button" class="quiet">Actualiser les entités</button><button id="save" type="button" class="primary">Enregistrer la configuration</button><button id="end" type="button" class="quiet">Terminer</button></div></div>
+    </section>
+  </main>
+  <dialog id="picker">
+    <div class="pickerHead"><div><p class="eyebrow">HOME ASSISTANT</p><h2>Choisir une entité</h2></div><button id="closePicker" type="button" class="quiet" aria-label="Fermer">Fermer</button></div>
+    <input id="search" type="search" autocomplete="off" placeholder="Rechercher un nom, une pièce ou entity_id…">
+    <p id="pickerInfo" class="muted"></p>
+    <div id="results" class="results"></div>
+    <button type="button" class="quiet" id="clearEntity">Effacer cette sélection</button>
+  </dialog>
+</body>
+</html>
