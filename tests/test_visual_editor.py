@@ -71,7 +71,9 @@ class VisualEditorTests(unittest.TestCase):
         content = (PY / "editor_ws.py").read_text()
         for endpoint in ("list", "get", "save"):
             self.assertIn('"ha_frame/editor/' + endpoint + '"', content)
-        self.assertEqual(content.count("@websocket_api.require_admin"), 3)
+        self.assertGreaterEqual(content.count("@websocket_api.require_admin"), 3)
+        self.assertEqual(content.count("@websocket_api.require_admin"),
+                         content.count("websocket_api.async_register_command(hass,"))
         self.assertRegex(content, r"@websocket_api.require_admin\s+@websocket_api.websocket_command")
         self.assertIn('coordinator = _entry_coordinator(hass, msg["entry_id"])', content)
         self.assertIn('connection.send_error(msg["id"], "conflict"', content)
