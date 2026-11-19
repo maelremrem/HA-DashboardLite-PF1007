@@ -17,6 +17,7 @@ register_node = next(
     and node.name == "async_register_editor_frontend"
 )
 scope = {
+    "__file__": str(FRONTEND),
     "Path": Path,
     "StaticPathConfig": lambda url, path, cache: (url, path, cache),
     "RESOURCE_PATH": "/ha-frame/ha-frame-editor.js",
