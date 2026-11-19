@@ -148,6 +148,7 @@ const preview = {clientWidth:640, innerHTML:"", style:"", setAttribute(name,valu
 instance._hass = {states:{"weather.home":{state:"sunny",attributes:{temperature:20}}}};
 instance._frames = [{entry_id:"frame-1",online:true,version:"1.0.0"}];
 instance._frameId = "frame-1";
+instance._page = 0;
 instance._config.pages = [{title:"Caméras",columns:3,cards:[
   {type:"camera",label:"Entrée",entity_id:"camera.entree",col_span:2,row_span:2,icon:"camera"},
   {type:"weather",label:"Dehors",entity_id:"weather.home",icon:"sun"}
