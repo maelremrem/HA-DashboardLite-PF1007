@@ -1,4 +1,4 @@
-# HA Frame Studio — Home Assistant sidebar editor (integration v1.4.0)
+# HA Frame Studio — Home Assistant sidebar editor (integration v1.5.0)
 
 The Home Assistant integration now installs a dedicated **HA Frame Studio** sidebar panel. You can configure all paired PF1007 frames directly from Home Assistant, without manually adding a Lovelace card or JavaScript resource.
 
@@ -6,14 +6,22 @@ The editor is a standalone full-page panel at **/ha-frame-studio**, with the sam
 
 ## Setup
 
-1. Update the **HA Frame PF1007** integration to **v1.4.0** through HACS/Marketplace (or replace `custom_components/ha_frame` manually).
+1. Update the **HA Frame PF1007** integration to **v1.5.0** through HACS/Marketplace (or replace `custom_components/ha_frame` manually).
 2. Restart Home Assistant, then hard-refresh the browser if the panel is not immediately visible.
 3. Open **HA Frame Studio** from the left sidebar. Alternatively, visit `https://YOUR_HA_HOST/ha-frame-studio`.
 4. Select a frame using the dropdown at the top. The panel lists all paired frames.
 
 **Admin-only:** only Home Assistant administrators can see/open the panel or use its editor WebSocket commands. The panel never exposes frame tokens to the browser.
 
-**No Android update:** the existing Android APK v0.9.0 supports the same authenticated config endpoints. Re-pairing is not needed.
+**No Android update for v1.5:** keep Android APK v1.1.1. Re-pairing is not needed.
+
+## v1.5: history, tile size and style clipboard
+
+- **Undo / Redo:** use the toolbar buttons or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y. The history is limited to 50 recent edits per frame. Typing into a text field uses the browser's native text undo; rapid typing in Studio is grouped into fewer history steps.
+- **Resize from preview:** select a tile, then use its four small ↔−/↔+/↕−/↕+ buttons to change width (1–page columns) or height (1–2 rows). The layout is checked using the same 3-row first-fit logic as Android; an impossible resize is refused without losing the previous size.
+- **Copy / Paste style:** from the tile inspector, copy and paste the tile's color and corner-radius overrides without changing its type, entity, action, icon or dimensions. Clipboard content is held only in this Studio session.
+- **Safe editing:** edits never trigger HA services. Undo/redo does not save to the device. After **Save**, the saved result is the new history baseline. Switching/reloading frames discards unsaved history after confirmation.
+- **Compatibility:** v1.5 is a Home Assistant-only update. The existing Android 1.1.1 APK supports these controls without reinstallation.
 
 ## Visual editing
 
@@ -78,7 +86,7 @@ In Lovelace resource storage mode, the integration automatically registers its J
 lovelace:
   resource_mode: yaml
   resources:
-    - url: /ha-frame/ha-frame-editor.js?v=1.1.0
+    - url: /ha-frame/ha-frame-editor.js?v=1.5.0
       type: module
 ```
 
@@ -93,8 +101,8 @@ entry_id: REPLACE_WITH_HA_FRAME_CONFIG_ENTRY_ID
 
 ## Troubleshooting
 
-- **Sidebar missing:** confirm integration v1.4.0 is installed and Home Assistant restarted. Open `/ha-frame-studio` directly. Check the user is an administrator.
-- **Blank panel:** check `/ha-frame/ha-frame-studio-panel.js?v=1.1.0` and `/ha-frame/ha-frame-editor.js?v=1.1.0` are served by Home Assistant. Inspect browser console errors.
+- **Sidebar missing:** confirm integration v1.5.0 is installed and Home Assistant restarted. Open `/ha-frame-studio` directly. Check the user is an administrator.
+- **Blank panel:** check `/ha-frame/ha-frame-studio-panel.js?v=1.5.0` and `/ha-frame/ha-frame-editor.js?v=1.5.0` are served by Home Assistant. Inspect browser console errors.
 - **Legacy card not found:** verify its module resource under Settings → Dashboards → Resources. This does not affect the sidebar.
 - **Frame offline:** confirm Wi-Fi and TCP port 8766. The editor accesses frames via Home Assistant's backend.
 - **Conflict on save:** the layout changed outside Studio. Reload it before reapplying changes.

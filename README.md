@@ -1,4 +1,4 @@
-# HA Frame — PF1007 native dashboard (Android v1.0.0 / HA integration v1.3.0)
+# HA Frame — PF1007 native dashboard (Android v1.1.1 / HA integration v1.5.0)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
 
@@ -25,6 +25,12 @@ The Home Assistant integration now exposes a **Configure** wizard that edits the
 This release changes **only the HA integration**. The existing Android **v0.7 APK** continues to work; stored HA credentials and brightness/night settings are unchanged. The editor is a guided native Home Assistant form (up/down reordering, **not drag-and-drop**).
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
+
+## HA Frame Studio v1.5.0 — Visual editor workflow
+
+The Home Assistant Studio editor now supports up to **50 local undo/redo steps** (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y) with per-frame history, text-input-aware shortcuts and a new baseline after saving. When a tile is selected, **↔/↕ controls** in the preview adjust its column and row spans safely. A tile's native Canvas colors and radius can also be copied and pasted to another tile without changing its entity, type or icon. Existing drag-to-reorder and inspector controls are unchanged.
+
+All edits remain local until **Save to this frame** is clicked; reloading a frame discards the local history after confirmation. Only the **Home Assistant integration v1.5.0** needs updating: **Android APK v1.1.1 remains compatible**. See the [roadmap](docs/ROADMAP.md) for phases v1.6–2.1.
 
 ## Android APK v1.1.1 — Android 6 startup crash fix
 

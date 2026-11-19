@@ -1,5 +1,5 @@
 /* HA Frame visual editor - bundled with the Home Assistant integration. */
-const CARD_VERSION = "1.4.0";
+const CARD_VERSION = "1.5.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
   ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"],
@@ -313,6 +313,10 @@ const STYLE = [
   ".screen-grid{position:absolute;left:3.90625%;right:3.90625%;top:34.5%;height:59%;display:grid;column-gap:1.2712%;row-gap:3.178%;align-content:start;min-height:0;min-width:0}",
   ".screen-tile{box-sizing:border-box;border:1px solid transparent;min-width:0;min-height:0;border-radius:1.55cqw;padding:clamp(4px,1.25cqw,18px);background:#1b2432;display:flex;flex-direction:column;justify-content:space-between;gap:clamp(1px,.33cqw,5px);cursor:pointer;overflow:hidden;position:relative}",
   ".screen-tile:hover{border-color:#67dbbaaa}.screen-tile.selected{border-color:#5adad5;box-shadow:inset 0 0 0 1px #5adad5}",
+  ".tile-resizer{position:absolute;right:3px;bottom:3px;display:flex;gap:2px;padding:2px;background:#091523ee;border:1px solid #67dbba88;border-radius:5px;z-index:4}",
+  ".tile-resizer button{padding:2px 3px;min-width:21px;min-height:22px;border-radius:4px;color:#f5f7fb;background:#1c4151;border-color:#477784;font-size:10px;font-weight:700;line-height:1;touch-action:manipulation}",
+  ".tile-resizer button:disabled{opacity:.3}.tile-resizer button:hover:not(:disabled){background:#246579}",
+
   ".tile-label{flex:0 0 auto;font-size:clamp(8px,1.55cqw,20px);line-height:1.05;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
   ".tile-value{flex:0 1 auto;font-size:clamp(11px,2.5cqw,34px);line-height:1.1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".tile-hint{flex:0 0 auto;font-size:clamp(7px,1.15cqw,15px);line-height:1;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
@@ -407,10 +411,19 @@ class HaFrameVisualEditor extends HTMLElement {
     this._notice = "";
     this._error = false;
     this._drag = -1;
+    this._history = [];
+    this._historyIndex = -1;
+    this._savedSnapshot = "";
+    this._historyGroup = "";
+    this._historyGroupAt = 0;
+    this._styleClipboard = null;
+    this._loadSequence = 0;
+    this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
     this.shadowRoot.addEventListener("input", (event) => this._input(event));
     this.shadowRoot.addEventListener("change", (event) => this._change(event));
     this.shadowRoot.addEventListener("dragstart", (event) => {
+      if (event.target.closest("[data-resize]")) { event.preventDefault(); return; }
       const tile = event.target.closest("[data-tile]");
       if (!tile) return;
       this._drag = Number(tile.dataset.tile);
@@ -448,11 +461,82 @@ class HaFrameVisualEditor extends HTMLElement {
     const node = this.shadowRoot.querySelector("[data-notice]");
     if (node) { node.textContent = this._notice; node.className = "status" + (this._error ? " error" : ""); }
   }
-  _mark() {
-    this._dirty = true;
-    this._message("Modifications non enregistrées", false);
+  _checkpoint() {
+    return {
+      json: JSON.stringify(this._config),
+      page: this._page, tile: this._tile, panel: this._panel
+    };
+  }
+  _resetHistory() {
+    this._history = [this._checkpoint()];
+    this._historyIndex = 0;
+    this._savedSnapshot = this._history[0].json;
+    this._historyGroup = "";
+    this._historyGroupAt = 0;
+    this._dirty = false;
+  }
+  _syncEditState() {
+    this._dirty = JSON.stringify(this._config) !== this._savedSnapshot;
+    this._message(this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre", false);
     const save = this.shadowRoot.querySelector("[data-action='save']");
-    if (save) save.disabled = false;
+    const undo = this.shadowRoot.querySelector("[data-action='undo']");
+    const redo = this.shadowRoot.querySelector("[data-action='redo']");
+    if (save) save.disabled = !this._dirty || this._busy;
+    if (undo) undo.disabled = this._historyIndex <= 0 || this._busy;
+    if (redo) redo.disabled = this._historyIndex >= this._history.length - 1 || this._busy;
+  }
+  _mark(group = "") {
+    if (!this._config) return;
+    if (!this._history.length) this._resetHistory();
+    const next = this._checkpoint();
+    const current = this._history[this._historyIndex];
+    if (next.json !== current.json) {
+      const now = Date.now();
+      // Coalesce fast typing into a single undo step, not unrelated actions.
+      const grouped = group && group === this._historyGroup &&
+        now - this._historyGroupAt < 750 &&
+        this._historyIndex > 0 && this._historyIndex === this._history.length - 1;
+      if (grouped) {
+        this._history[this._historyIndex] = next;
+      } else {
+        this._history.splice(this._historyIndex + 1);
+        this._history.push(next);
+        if (this._history.length > 51) this._history.shift();
+        this._historyIndex = this._history.length - 1;
+      }
+      this._historyGroup = group;
+      this._historyGroupAt = now;
+    }
+    this._syncEditState();
+  }
+  _stepHistory(delta) {
+    const next = this._historyIndex + delta;
+    if (!this._config || this._busy || next < 0 || next >= this._history.length) return;
+    const snapshot = this._history[next];
+    this._historyIndex = next;
+    this._historyGroup = "";
+    this._config = JSON.parse(snapshot.json);
+    this._page = Math.min(snapshot.page, this._config.pages.length - 1);
+    this._tile = Math.min(snapshot.tile, this._config.pages[this._page].cards.length - 1);
+    this._panel = snapshot.panel;
+    this._dirty = snapshot.json !== this._savedSnapshot;
+    this._notice = this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre";
+    this._error = false;
+    this._render();
+  }
+  _shortcut(event) {
+    if (!this._config || this._busy || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+    // Preserve native text undo/redo in form fields.
+    if (event.target && event.target.closest &&
+        event.target.closest("input, textarea, select, ha-icon-picker, [contenteditable]")) return;
+    const key = String(event.key || "").toLowerCase();
+    if (key === "z") {
+      event.preventDefault();
+      this._stepHistory(event.shiftKey ? 1 : -1);
+    } else if (key === "y" && !event.shiftKey) {
+      event.preventDefault();
+      this._stepHistory(1);
+    }
   }
   async _bootstrap() {
     if (this._loading || !this._hass) return;
@@ -473,20 +557,27 @@ class HaFrameVisualEditor extends HTMLElement {
     } finally { this._loading = false; }
   }
   async _open() {
+    const frameId = this._frameId;
+    const requestId = (this._loadSequence || 0) + 1;
+    this._loadSequence = requestId;
     this._config = null;
+    this._history = [];
+    this._historyIndex = -1;
     this._revision = "";
     this.shadowRoot.innerHTML = "<style>" + STYLE + "</style><ha-card><div class='empty'>Chargement de la configuration du cadre…</div></ha-card>";
     try {
-      const response = await this._hass.callWS({type:"ha_frame/editor/get", entry_id:this._frameId});
+      const response = await this._hass.callWS({type:"ha_frame/editor/get", entry_id:frameId});
+      if (requestId !== this._loadSequence || frameId !== this._frameId) return;
       this._config = clone(response.config);
       this._revision = response.revision;
       this._page = 0;
       this._tile = -1;
       this._panel = "tile";
-      this._dirty = false;
+      this._resetHistory();
       this._message("", false);
       this._render();
     } catch (error) {
+      if (requestId !== this._loadSequence || frameId !== this._frameId) return;
       this._message("Impossible de charger ce cadre : " + (error.message || error), true);
       this.shadowRoot.innerHTML = "<style>" + STYLE + "</style><ha-card><div class='top'><div class='heading'>Cadre indisponible</div><div class='row toolbar'><select data-control='frame'>" +
         this._frameOptions() + "</select><button data-action='reload'>Réessayer</button></div></div><div class='empty'>" +
@@ -515,9 +606,13 @@ class HaFrameVisualEditor extends HTMLElement {
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
       "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
+      "<button data-action='undo' title='Annuler (Ctrl/Cmd+Z)' aria-label='Annuler la dernière modification'" +
+      (this._historyIndex <= 0 ? " disabled" : "") + ">↶ Annuler</button>" +
+      "<button data-action='redo' title='Rétablir (Ctrl/Cmd+Maj+Z ou Ctrl/Cmd+Y)' aria-label='Rétablir la modification'" +
+      (this._historyIndex >= this._history.length-1 ? " disabled" : "") + ">↷ Rétablir</button>" +
       "<span class='spacer'></span><label>" + esc(page.cards.length) + "/" + esc(page.columns*3) + " tuiles</label></div></div>" +
       "<div class='content'><div class='canvas-area'>" +
-      "<div class='canvas-head'><strong>Aperçu du cadre</strong><span class='muted'>Clique une tuile pour la modifier · glisse pour déplacer</span></div>" +
+      "<div class='canvas-head'><strong>Aperçu du cadre</strong><span class='muted'>Clique pour modifier · glisse pour déplacer · sélectionne puis ↔/↕ pour redimensionner</span></div>" +
       "<div class='pagebar'>" + buttons + "<button data-action='add-page' class='page' title='Ajouter une page'>+ Page</button></div>" +
       "<div class='screen-wrap'><div class='screen' data-preview></div></div>" +
       "<div class='hint' style='margin-top:9px'>Simulation du rendu Canvas Android. Les états affichés viennent de Home Assistant ; aucun appareil n’est actionné depuis cet aperçu.</div></div>" +
@@ -526,7 +621,7 @@ class HaFrameVisualEditor extends HTMLElement {
       (cloneOptions ? "<label class='muted'>Copier la config d’un autre cadre :</label><select data-control='source'>" + cloneOptions + "</select><button class='btn-small' data-action='clone'>Copier</button>" : "<span class='muted'>Chaque cadre conserve sa configuration indépendante.</span>") +
       "</div><div class='row'><span class='status" + (this._error ? " error" : "") + "' data-notice>" +
       esc(this._notice || (this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre")) +
-      "</span><button data-action='discard'>Annuler</button><button class='primary' data-action='save'" +
+      "</span><button data-action='discard' title='Relire le cadre et perdre les modifications locales'>Recharger le cadre</button><button class='primary' data-action='save'" +
       (!this._dirty ? " disabled" : "") + ">Enregistrer sur ce cadre</button></div></div></ha-card>";
     this._preview();
     this._inspector();
@@ -618,6 +713,16 @@ class HaFrameVisualEditor extends HTMLElement {
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
       const cell = layout.cells[i];
+      const selected = this._tile === i;
+      const controls = !selected ? "" : "<div class='tile-resizer' role='group' aria-label='Dimensions de la tuile'>" +
+        [["shrink-width","↔−","Réduire la largeur",cell.w<=1],
+         ["grow-width","↔+","Augmenter la largeur",cell.w>=page.columns],
+         ["shrink-height","↕−","Réduire la hauteur",cell.h<=1],
+         ["grow-height","↕+","Augmenter la hauteur",cell.h>=2]]
+          .map(([action,symbol,title,disabled])=>"<button type='button' draggable='false' data-resize='" +
+            action + "' data-resize-index='" + i + "' aria-label='" + title +
+            "' title='" + title + "'" + (disabled ? " disabled" : "") + ">" + symbol + "</button>").join("") +
+        "</div>";
       const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
       const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
         "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
@@ -630,7 +735,8 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type === "camera" ? camera : "<div class='tile-value' style='" + valueCss + ";" + labelColor + "'>" +
         esc(value) + "</div>") +
         (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
-        "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div></div>";
+        "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div>" +
+        controls + "</div>";
     }).join("");
     const date = new Intl.DateTimeFormat("fr-FR", {weekday:"long",day:"numeric",month:"long"}).format(new Date());
     const clock = new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",minute:"2-digit"}).format(new Date());
@@ -764,7 +870,10 @@ class HaFrameVisualEditor extends HTMLElement {
         "<div class='tile-style-grid'>" + appearance + "</div>" +
         "<label class='field'>Rayon des angles (px ; vide = thème)<input data-bind='style-radius' type='number' min='0' max='72' placeholder='Par défaut' value='" +
         esc(radius) + "'></label>" +
-        "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button></div>" +
+        "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button>" +
+        "<button data-action='copy-tile-style'>Copier le style</button>" +
+        "<button data-action='paste-tile-style'" + (this._styleClipboard === null || this._styleClipboard === undefined ? " disabled" : "") +
+        ">Coller le style</button></div>" +
         "<div class='actions'><button data-action='tile-left'>← Avant</button><button data-action='tile-right'>Après →</button>" +
         "<button data-action='duplicate-tile'>Dupliquer</button>" +
         "<button data-action='delete-tile' class='danger'>Supprimer</button></div>";
@@ -787,6 +896,14 @@ class HaFrameVisualEditor extends HTMLElement {
     }
   }
   _click(event) {
+    if (this._busy) return;
+    const resize = event.target.closest("[data-resize]");
+    if (resize) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!resize.disabled) this._resizeTile(Number(resize.dataset.resizeIndex), resize.dataset.resize);
+      return;
+    }
     const tile = event.target.closest("[data-tile]");
     if (tile) {
       this._tile = Number(tile.dataset.tile);
@@ -809,6 +926,10 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (this._busy) {
+      if (target.dataset.control === "frame") target.value = this._frameId;
+      return;
+    }
     if (target.dataset.control === "frame") {
       const next = target.value, previous = this._frameId;
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) {
@@ -838,6 +959,7 @@ class HaFrameVisualEditor extends HTMLElement {
     }
   }
   _input(event) {
+    if (this._busy) return;
     const target = event.target, bind = target.dataset.bind;
     if (!bind || bind === "preset" || !this._config) return;
     const page = this._pageObject(), tile = this._tileObject();
@@ -897,7 +1019,9 @@ class HaFrameVisualEditor extends HTMLElement {
         if (!Object.keys(style).length) delete tile.style;
       }
     }
-    this._mark();
+    const typing = target.tagName === "TEXTAREA" ||
+      (target.tagName === "INPUT" && ["text", "search", "url"].includes(target.type));
+    this._mark(typing ? "typing:" + this._page + ":" + this._tile + ":" + bind : "");
     this._preview();
   }
   _applyPreset(id) {
@@ -925,6 +1049,36 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     this._tile = -1;
     this._panel = "page";
+    this._mark();
+    this._render();
+  }
+  _resizeTile(index, action) {
+    if (!this._config || this._busy) return;
+    const choices = {
+      "grow-width": ["col_span", 1], "shrink-width": ["col_span", -1],
+      "grow-height": ["row_span", 1], "shrink-height": ["row_span", -1]
+    };
+    const choice = choices[action], page = this._pageObject();
+    const tile = page.cards[index];
+    if (!choice || !tile) return;
+    const [key, change] = choice;
+    const previous = tile[key] == null ? 1 : tile[key];
+    const next = previous + change;
+    const maximum = key === "col_span" ? page.columns : 2;
+    if (next < 1 || next > maximum) return;
+    const had = Object.prototype.hasOwnProperty.call(tile, key);
+    if (next === 1) delete tile[key];
+    else tile[key] = next;
+    try {
+      gridPlacement(page);
+    } catch (error) {
+      if (had) tile[key] = previous;
+      else delete tile[key];
+      this._message(error.message, true);
+      return;
+    }
+    this._tile = index;
+    this._panel = "tile";
     this._mark();
     this._render();
   }
@@ -1057,7 +1211,7 @@ class HaFrameVisualEditor extends HTMLElement {
       });
       this._config = prepared;
       this._revision = response.revision;
-      this._dirty = false;
+      this._resetHistory();
       this._message("Enregistré sur le cadre sélectionné", false);
       this._render();
     } catch (error) {
@@ -1065,12 +1219,15 @@ class HaFrameVisualEditor extends HTMLElement {
     } finally {this._busy = false;}
   }
   async _action(action) {
+    if (this._busy) return;
     if (!this._config) {
       if (action === "reload") return this._open();
       return;
     }
     const page = this._pageObject(), tile = this._tileObject();
     if (action === "save") return this._save();
+    if (action === "undo") return this._stepHistory(-1);
+    if (action === "redo") return this._stepHistory(1);
     if (action === "reload" || action === "discard") {
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
       return this._open();
@@ -1107,6 +1264,16 @@ class HaFrameVisualEditor extends HTMLElement {
       try { gridPlacement(page); }
       catch (error) { page.cards.pop(); return this._message(error.message,true); }
       this._tile=page.cards.length-1;this._panel="tile";
+    } else if (action === "copy-tile-style") {
+      if (!tile) return;
+      this._styleClipboard = clone(tile.style || {});
+      this._message("Style de la tuile copié", false);
+      this._inspector();
+      return;
+    } else if (action === "paste-tile-style") {
+      if (!tile || this._styleClipboard == null) return;
+      if (Object.keys(this._styleClipboard).length) tile.style = clone(this._styleClipboard);
+      else delete tile.style;
     } else if (action === "clear-tile-style") {
       if (!tile) return;
       delete tile.style;
