@@ -45,7 +45,8 @@ final class CameraFeed {
         call = null;
         if (previous != null) previous.cancel();
         if (!next.isEmpty()) {
-            Thread worker = new Thread(() -> run(next, id), "haframe-camera");
+            final String chosen = next;
+            Thread worker = new Thread(() -> run(chosen, id), "haframe-camera");
             worker.setDaemon(true);
             worker.start();
         }
