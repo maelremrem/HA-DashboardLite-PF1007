@@ -13,6 +13,7 @@ import voluptuous as vol
 from .api import FrameApiError
 from .const import DOMAIN
 from .dashboard_editor import validate_pages
+from . import studio_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -146,6 +147,15 @@ async def editor_save(hass, connection, msg):
             return
         await coordinator.api.update(proposed)
         updated = await coordinator.api.config()
+        try:
+            previous = {key: current[key] for key in ("dashboard_title", "custom_css", "pages")}
+            if "slideshow" in current:
+                previous["slideshow"] = current["slideshow"]
+            await studio_store.capture_snapshot(
+                hass, msg["entry_id"], msg["revision"], validate_layout(previous)
+            )
+        except Exception:
+            _LOGGER.exception("Could not capture optional HA Frame layout snapshot")
         await coordinator.async_request_refresh()
     except FrameApiError as exc:
         _LOGGER.warning("Could not save HA Frame layout: %s", type(exc).__name__)
@@ -154,8 +164,96 @@ async def editor_save(hass, connection, msg):
     connection.send_result(msg["id"], {"revision": layout_revision(updated)})
 
 
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "ha_frame/editor/profiles"})
+@websocket_api.async_response
+async def editor_profiles(hass, connection, msg):
+    connection.send_result(msg["id"], {"profiles": await studio_store.list_profiles(hass)})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/profile_get",
+    vol.Required("profile_id"): str,
+})
+@websocket_api.async_response
+async def editor_profile_get(hass, connection, msg):
+    config = await studio_store.get_profile(hass, msg["profile_id"])
+    if config is None:
+        connection.send_error(msg["id"], "not_found", "Profile not found")
+    else:
+        connection.send_result(msg["id"], {"config": validate_layout(config)})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/profile_save",
+    vol.Required("name"): str,
+    vol.Required("config"): dict,
+})
+@websocket_api.async_response
+async def editor_profile_save(hass, connection, msg):
+    try:
+        config = validate_layout(msg["config"])
+        profile_id = await studio_store.save_profile(hass, msg["name"], config)
+    except (TypeError, ValueError):
+        connection.send_error(msg["id"], "invalid_config", "Invalid profile")
+        return
+    connection.send_result(msg["id"], {"profile_id": profile_id})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/profile_delete",
+    vol.Required("profile_id"): str,
+})
+@websocket_api.async_response
+async def editor_profile_delete(hass, connection, msg):
+    deleted = await studio_store.delete_profile(hass, msg["profile_id"])
+    connection.send_result(msg["id"], {"deleted": deleted})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/snapshots",
+    vol.Required("entry_id"): str,
+})
+@websocket_api.async_response
+async def editor_snapshots(hass, connection, msg):
+    if _entry_coordinator(hass, msg["entry_id"]) is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    history = await studio_store.list_snapshots(hass, msg["entry_id"])
+    connection.send_result(msg["id"], {"snapshots": history})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/snapshot_get",
+    vol.Required("entry_id"): str,
+    vol.Required("revision"): str,
+})
+@websocket_api.async_response
+async def editor_snapshot_get(hass, connection, msg):
+    if _entry_coordinator(hass, msg["entry_id"]) is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    config = await studio_store.get_snapshot(hass, msg["entry_id"], msg["revision"])
+    if config is None:
+        connection.send_error(msg["id"], "not_found", "Snapshot not found")
+    else:
+        connection.send_result(msg["id"], {"config": validate_layout(config)})
+
+
 def async_register_editor_commands(hass):
     """Called once during integration setup, never once per frame."""
     websocket_api.async_register_command(hass, editor_list)
     websocket_api.async_register_command(hass, editor_get)
     websocket_api.async_register_command(hass, editor_save)
+    websocket_api.async_register_command(hass, editor_profiles)
+    websocket_api.async_register_command(hass, editor_profile_get)
+    websocket_api.async_register_command(hass, editor_profile_save)
+    websocket_api.async_register_command(hass, editor_profile_delete)
+    websocket_api.async_register_command(hass, editor_snapshots)
+    websocket_api.async_register_command(hass, editor_snapshot_get)
