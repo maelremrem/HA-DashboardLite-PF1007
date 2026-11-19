@@ -10,7 +10,7 @@ const TYPES = [
 ];
 const RULE_OPERATORS = [
   ["equals", "Égal à"], ["not_equals", "Différent de"], ["above", "Supérieur à"],
-  ["below", "Inférieur à"], ["on", "Actif"], ["off", "Inactif"]
+  ["below", "Inférieur à"], ["on", "Actif"], ["off", "Inactif"], ["time_between", "Plage horaire"]
 ];
 const TAP_ACTIONS = [
   ["default", "Action par défaut"], ["none", "Aucune"], ["page_next", "Page suivante"],
@@ -26,19 +26,35 @@ function checkRule(rule, visual = true) {
   if (!rule || typeof rule !== "object" || Array.isArray(rule)) return "Règle invalide";
   const keys = ["entity_id","operator","value",...(visual?["hide","background"]:[])];
   if (Object.keys(rule).some(k=>!keys.includes(k))) return "Option de règle interdite";
-  if (!RULE_ENTITY_RE.test(rule.entity_id||"")) return "Entité de condition invalide";
+  if (rule.operator!=="time_between" && !RULE_ENTITY_RE.test(rule.entity_id||"")) return "Entité de condition invalide";
+  if (rule.operator==="time_between" && rule.entity_id &&
+      !RULE_ENTITY_RE.test(rule.entity_id)) return "Entité de condition invalide";
   if (!RULE_OPERATORS.some(([key])=>key===rule.operator)) return "Opérateur invalide";
   if (typeof rule.value !== "string" || rule.value.length>64) return "Valeur de condition invalide";
   if (["equals","not_equals"].includes(rule.operator) && !rule.value) return "Valeur requise";
   if (["above","below"].includes(rule.operator) && !/^-?\d{1,6}(?:\.\d{1,3})?$/.test(rule.value)) {
     return "Seuil numérique invalide";
   }
+  if (rule.operator==="time_between" &&
+      !/^(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d$/.test(rule.value)) {
+    return "Plage horaire invalide (HH:MM-HH:MM)";
+  }
   if ("hide" in rule && typeof rule.hide !== "boolean") return "Masquage invalide";
   if ("background" in rule && !/^#[0-9a-fA-F]{6}$/.test(rule.background)) return "Couleur invalide";
   return "";
 }
 function matchesRule(rule, states) {
-  if (!rule || !states) return false;
+  if (!rule) return false;
+  if (rule.operator==="time_between") {
+    const value=rule.value||"";
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return false;
+    const [a,b]=value.split("-");
+    const minutes=part=>Number(part.slice(0,2))*60+Number(part.slice(3,5));
+    const now=new Date(), minute=now.getHours()*60+now.getMinutes();
+    const start=minutes(a),end=minutes(b);
+    return start<=end ? minute>=start&&minute<end : minute>=start||minute<end;
+  }
+  if (!states) return false;
   const state = states[rule.entity_id];
   if (!state || ["unavailable","unknown"].includes(state.state)) return false;
   const actual = String(state.state), value = rule.value || "";
@@ -1205,7 +1221,7 @@ class HaFrameVisualEditor extends HTMLElement {
       if (prop === "entity") next.entity_id = target.value.trim();
       if (prop === "operator") next.operator = target.value;
       if (prop === "value") next.value = target.value;
-      if (!next.entity_id) delete page.activate_when;
+      if (!next.entity_id && next.operator!=="time_between") delete page.activate_when;
       else page.activate_when = next;
     }
     else if (bind === "columns") {
@@ -1235,7 +1251,7 @@ class HaFrameVisualEditor extends HTMLElement {
         if (prop === "value") next.value = target.value;
         if (prop === "hide") next.hide = target.value === "true";
         if (prop === "background") next.background = target.value;
-        if (!next.entity_id) delete tile.rule;
+        if (!next.entity_id && next.operator!=="time_between") delete tile.rule;
         else tile.rule = next;
       }
       if (bind === "card-icon") {
