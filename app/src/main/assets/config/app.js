@@ -152,6 +152,7 @@ function validatePages(items) {
       if (card.type === 'camera' && card.entity_id && !card.entity_id.startsWith('camera.')) throw new Error('Utilise une entité camera.*');
       if (card.type === 'weather' && card.entity_id && !card.entity_id.startsWith('weather.')) throw new Error('Utilise une entité weather.*');
     }
+    if (page.cards.filter(card => card.type === "camera").length > 1) throw new Error("Une seule caméra par page");
     checkGrid(page);
   }
 }
