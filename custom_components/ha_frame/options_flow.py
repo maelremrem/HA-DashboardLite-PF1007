@@ -9,6 +9,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FrameApi, FrameApiError
+from .const import DOMAIN
 from .dashboard_editor import PRESETS, move, new_card, validate_pages
 
 
@@ -38,6 +39,9 @@ class FrameOptionsFlow(config_entries.OptionsFlow):
         except FrameApiError as exc:
             return "invalid_config" if "Invalid request" in str(exc) else "cannot_connect"
         self.snapshot.update(deepcopy(payload))
+        coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        if coordinator is not None:
+            await coordinator.async_request_refresh()
         return None
 
     @staticmethod
