@@ -16,7 +16,7 @@ CARD_ICONS = {"", "none", "home", "light", "thermometer", "energy", "water", "su
               "settings", "bell", "door", "plug", "moon", "heart"}
 ENTITY_ID = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 MDI_ICON = re.compile(r"^mdi:[a-z0-9]+(?:-[a-z0-9]+)*$")
-MDI_PATH = re.compile(r"^[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\\s-]+$")
+MDI_PATH = re.compile(r"^[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\s-]+$")
 MAX_MDI_PATH = 8192
 
 
