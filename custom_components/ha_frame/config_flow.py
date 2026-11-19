@@ -7,10 +7,16 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FrameApi, FrameApiError
 from .const import DOMAIN
+from .options_flow import FrameOptionsFlow
 
 
 class FrameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Open the native Home Assistant dashboard configuration editor."""
+        return FrameOptionsFlow()
 
     async def async_step_user(self, user_input=None):
         errors = {}
