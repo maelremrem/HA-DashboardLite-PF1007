@@ -247,7 +247,9 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("GET".equals(req.method) && "/api/v1/screenshot".equals(req.path)) {
+                if ("GET".equals(req.method) && "/api/v1/logs".equals(req.path)) {
+                    send(out, 200, new JSONObject().put("events", DiagnosticLog.snapshot()));
+                } else if ("GET".equals(req.method) && "/api/v1/screenshot".equals(req.path)) {
                     long now = SystemClock.elapsedRealtime();
                     synchronized (IntegrationApiServer.class) {
                         if (now - lastScreenshotAt < 5000L) {
