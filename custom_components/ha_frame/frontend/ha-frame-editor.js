@@ -33,6 +33,90 @@ const PRESETS = {
     ".accent { color: var(--accent); }"
   ].join("\n")
 };
+
+const PALETTE_THEMES = {
+  midnight: {label:"Minuit", bg:"#0b1020", card:"#171f34", on:"#263956", pressed:"#344763", text:"#f4f7ff", muted:"#a8b7cf", accent:"#8aaaff", tab:"#2e3f6a", activeText:"#dce5ff", radius:22},
+  forest: {label:"Forêt", bg:"#071c18", card:"#113129", on:"#1b4b3b", pressed:"#285a4a", text:"#e8fff3", muted:"#aad6c2", accent:"#7ce5ae", tab:"#234e3a", activeText:"#9dffd1", radius:24},
+  lavender: {label:"Lavande", bg:"#171126", card:"#29213b", on:"#463558", pressed:"#56456b", text:"#f8edff", muted:"#cbb9dc", accent:"#d5aaff", tab:"#41325e", activeText:"#f9d8ff", radius:28},
+  rose: {label:"Rose", bg:"#24131a", card:"#40212d", on:"#603044", pressed:"#764357", text:"#fff2f5", muted:"#ddb4c5", accent:"#ff9bb8", tab:"#653149", activeText:"#ffe4ed", radius:28},
+  graphite: {label:"Graphite", bg:"#111315", card:"#262a2e", on:"#383e43", pressed:"#484f56", text:"#f0f1f2", muted:"#aeb8be", accent:"#81d5de", tab:"#394246", activeText:"#bbfaff", radius:8},
+  solar: {label:"Solaire", bg:"#f8f1da", card:"#fff9ec", on:"#fde4b4", pressed:"#ecd29d", text:"#3c2b22", muted:"#795b47", accent:"#c96522", tab:"#f6ddb2", activeText:"#7b3c1c", radius:18},
+  arctic: {label:"Arctique", bg:"#edf7fa", card:"#ffffff", on:"#d1eef7", pressed:"#b9e4ee", text:"#183246", muted:"#537588", accent:"#197ca5", tab:"#c5edf6", activeText:"#174d69", radius:22},
+  retro: {label:"Rétro", bg:"#171c17", card:"#273326", on:"#4b5236", pressed:"#5a6442", text:"#f7f2cf", muted:"#c7c49a", accent:"#d5df74", tab:"#414d2e", activeText:"#eef0a9", radius:5},
+  synthwave: {label:"Synthwave", bg:"#170e2f", card:"#291a4b", on:"#4e2166", pressed:"#6f2b86", text:"#fcddff", muted:"#d4b2ec", accent:"#ff70d9", tab:"#512164", activeText:"#ffe6ff", radius:20},
+  sand: {label:"Sable", bg:"#25231f", card:"#3b352d", on:"#5d4b38", pressed:"#6a5741", text:"#fff1d5", muted:"#dac9a8", accent:"#ffd082", tab:"#665039", activeText:"#ffe4b2", radius:16}
+};
+function paletteCss(p) {
+  return [
+    `:root { --accent: ${p.accent}; }`,
+    `body { background-color: ${p.bg}; }`,
+    `.header, .clock, .metric-value, .settings { color: ${p.text}; }`,
+    `.subtitle, .date, .status, .metric-label { color: ${p.muted}; }`,
+    `.card, .settings { background-color: ${p.card}; border-radius: ${p.radius}px; }`,
+    `.page-tab { background-color: ${p.card}; color: ${p.muted}; border-radius: 12px; }`,
+    `.page-tab.active { background-color: ${p.tab}; color: ${p.activeText}; }`,
+    `.control.on { background-color: ${p.on}; }`,
+    `.control.pressed { background-color: ${p.pressed}; }`,
+    ".accent { color: var(--accent); }"
+  ].join("\n");
+}
+for (const [id,p] of Object.entries(PALETTE_THEMES)) PRESETS[id] = paletteCss(p);
+const THEME_LABELS = {
+  original:"Original", ocean:"Océan", amber:"Ambre", light:"Clair",
+  ...Object.fromEntries(Object.entries(PALETTE_THEMES).map(([id,p])=>[id,p.label]))
+};
+const SHAPES = {
+  standard: {label:"Standard", radius:20},
+  square: {label:"Anguleux", radius:4},
+  subtle: {label:"Discret", radius:12},
+  soft: {label:"Arrondi", radius:28},
+  bubble: {label:"Bulle", radius:36}
+};
+const DESIGN_START = "/* HA Frame Studio design */";
+const DESIGN_END = "/* Fin HA Frame Studio design */";
+function removeDesign(css) {
+  return String(css || "").replace(/\/\* HA Frame Studio design \*\/[\s\S]*?\/\* Fin HA Frame Studio design \*\//g, "").trim();
+}
+function readShape(css) {
+  const block = String(css || "").match(/\/\* HA Frame Studio design \*\/([\s\S]*?)\/\* Fin HA Frame Studio design \*\//);
+  if (!block) return "standard";
+  const m = block[1].match(/\.card, \.settings \{ border-radius: (\d+)px; \}/);
+  return Object.keys(SHAPES).find(k=>m && SHAPES[k].radius === Number(m[1])) || "standard";
+}
+function withShape(css, shape) {
+  const base = removeDesign(css);
+  if (shape === "standard") return base;
+  if (!SHAPES[shape]) throw new Error("Style inconnu");
+  const radius = SHAPES[shape].radius;
+  return [base, DESIGN_START, `.card, .settings { border-radius: ${radius}px; }`,
+    `.page-tab { border-radius: ${Math.round(radius/2)}px; }`, DESIGN_END].filter(Boolean).join("\n");
+}
+
+const LAYOUT_TEMPLATES = [
+  {id:"overview", name:"Vue générale", columns:3, tiles:[
+    ["metric","Température"], ["metric","Humidité"], ["metric","Puissance"],
+    ["light","Salon"], ["control","Mode maison"], ["cover","Volets"]]},
+  {id:"climate", name:"Climat", columns:2, tiles:[
+    ["thermostat","Thermostat"], ["metric","Intérieur"],
+    ["metric","Extérieur"], ["gauge","Humidité"]]},
+  {id:"energy", name:"Énergie", columns:3, tiles:[
+    ["metric","Puissance"], ["metric","Consommation"], ["metric","Production"],
+    ["gauge","Batterie"], ["metric","Énergie du jour"], ["control","Mode éco"]]},
+  {id:"lights", name:"Éclairages", columns:3, tiles:[
+    ["light","Salon"], ["light","Cuisine"], ["light","Bureau"],
+    ["light","Chambre"], ["light","Extérieur"], ["light","Ambiance"]]},
+  {id:"security", name:"Sécurité", columns:3, tiles:[
+    ["control","Alarme"], ["metric","Entrée"], ["metric","Garage"],
+    ["cover","Porte garage"], ["light","Extérieur"], ["metric","Présence"]]},
+  {id:"dense", name:"12 tuiles", columns:4, tiles:Array.from({length:12}, (_,i)=>["metric","Capteur "+(i+1)])}
+];
+function templatePage(template) {
+  return {
+    title: template.name, columns: template.columns,
+    cards: template.tiles.map(([type,label])=>({type,label,entity_id:"",min:0,max:100}))
+  };
+}
+
 const STYLE = [
   ":host{display:block;color:var(--primary-text-color,#223047);font:inherit;min-width:0}",
   "ha-card{display:block;overflow:hidden;padding:0;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:18px}",
