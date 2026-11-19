@@ -43,7 +43,7 @@ Each phase needs a green CI run, UI review in Home Assistant, a test with a phys
 
 ## Milestones and review
 
-1. Implement and test v1.5 in a PR; manual test in HA Studio; merge only after approval.
+1. **v1.5 implementation in progress on feature/studio-v1.5-visual-workflow:** automated regression tests and CI are required; manual test in HA Studio before merging.
 2. Before each later release, confirm widget data contracts and memory/performance budget on Android 6.
 3. Document Home Assistant ↔ APK minimum compatible versions, upgrade path and safe fallback.
 4. Keep CI green and validate at least one physical device after each Android-facing change.
