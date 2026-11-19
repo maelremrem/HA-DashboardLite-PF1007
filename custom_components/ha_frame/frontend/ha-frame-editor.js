@@ -396,6 +396,8 @@ const STYLE = [
   ".tile-graph{width:100%;height:36%;min-height:10px;flex:1 1 auto;overflow:hidden}.tile-graph polyline{fill:none;stroke:currentColor;stroke-width:3;vector-effect:non-scaling-stroke}",
   ".tile-circle{width:70%;height:48%;margin:auto;flex:1 1 auto;overflow:hidden}",
   ".diagnostics{display:grid;gap:0}.diagnostic-row{display:flex;gap:12px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--divider-color,#ddd);font-size:12px}.diagnostic-row strong{font-size:12px;text-align:right;overflow-wrap:anywhere}.diagnostic-screenshot{width:100%;max-width:640px;height:auto;margin-top:12px;border:1px solid var(--divider-color,#ddd);border-radius:8px}",
+  ".device-log{max-height:200px;overflow:auto;font:11px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;background:var(--secondary-background-color,#f2f3f5);padding:10px;border-radius:7px}",
+
 
 
   ".bar{flex:0 0 auto;height:clamp(2px,.45cqw,6px);background:#ffffff2c;border-radius:99px;overflow:hidden}.bar>i{display:block;height:100%;background:#67dbba;border-radius:inherit}",
@@ -493,6 +495,7 @@ class HaFrameVisualEditor extends HTMLElement {
     this._snapshots = [];
     this._deviceStatus = null;
     this._screenshot = "";
+    this._deviceEvents = [];
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -942,6 +945,8 @@ class HaFrameVisualEditor extends HTMLElement {
         (this._panel==="device" && this._screenshot ?
           "<img class='diagnostic-screenshot' alt='Capture récente du cadre' src='data:image/jpeg;base64," +
           this._screenshot + "'>" : "") +
+        (this._panel==="device" ? "<div class='actions'><button data-action='logs-refresh'>Événements du cadre</button></div>" +
+          "<pre class='device-log'>" + esc(this._deviceEvents.join("\n")) + "</pre>" : "") +
         (this._panel==="updates" ?
           "<p class='hint'>Mise à jour sécurisée : vérifie l’empreinte de signature de l’APK, " +
           "puis installe la nouvelle version depuis Fedora avec adb install -r. " +
@@ -1587,6 +1592,17 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   async _deviceAction(action) {
     if (action==="diagnostics-refresh") return this._refreshDiagnostics();
+    if (action==="logs-refresh") {
+      try {
+        const frameId=this._frameId;
+        const response=await this._hass.callWS({type:"ha_frame/editor/logs",entry_id:frameId});
+        if (frameId===this._frameId) {
+          this._deviceEvents=(response.events||[]).slice(-60).map(String);
+          this._render();
+        }
+      } catch(error) { this._message("Journal indisponible : "+(error.message||error),true); }
+      return;
+    }
     if (action==="capture") {
       const frameId=this._frameId;
       try {
@@ -1669,7 +1685,7 @@ class HaFrameVisualEditor extends HTMLElement {
       this._panel=action;this._tile=-1;
       this._render();await this._refreshDiagnostics();return;
     }
-    if (["diagnostics-refresh","capture","reload-dashboard"].includes(action)) {
+    if (["diagnostics-refresh","capture","reload-dashboard","logs-refresh"].includes(action)) {
       return this._deviceAction(action);
     }
     if (["profile-save","profile-apply","profile-delete","snapshot-apply",
