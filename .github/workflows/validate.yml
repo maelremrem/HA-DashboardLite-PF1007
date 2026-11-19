@@ -49,6 +49,8 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - name: Validate native Canvas CSS and theme presets
+        run: bash tests/test-css.sh
       - name: Build debug APK
         run: bash scripts/build-fedora.sh
       - uses: actions/upload-artifact@v4

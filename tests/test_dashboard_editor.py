@@ -55,7 +55,7 @@ class DashboardEditorTests(unittest.TestCase):
             model.validate_pages(invalid)
 
     def test_presets(self):
-        self.assertEqual(set(model.PRESETS), {"original", "ocean", "amber", "light"})
+        self.assertEqual(set(model.PRESETS), {"original","ocean","amber","light","midnight","forest","lavender","rose","graphite","solar","arctic","retro","synthwave","sand"})
         self.assertTrue(all(len(css) <= 12000 for css in model.PRESETS.values()))
 
 

@@ -1,5 +1,5 @@
 /* HA Frame visual editor - bundled with the Home Assistant integration. */
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.2.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
   ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"]
@@ -33,6 +33,119 @@ const PRESETS = {
     ".accent { color: var(--accent); }"
   ].join("\n")
 };
+
+const PALETTE_THEMES = {
+  midnight: {label:"Minuit", bg:"#0b1020", card:"#171f34", on:"#263956", pressed:"#344763", text:"#f4f7ff", muted:"#a8b7cf", accent:"#8aaaff", tab:"#2e3f6a", activeText:"#dce5ff", radius:22},
+  forest: {label:"Forêt", bg:"#071c18", card:"#113129", on:"#1b4b3b", pressed:"#285a4a", text:"#e8fff3", muted:"#aad6c2", accent:"#7ce5ae", tab:"#234e3a", activeText:"#9dffd1", radius:24},
+  lavender: {label:"Lavande", bg:"#171126", card:"#29213b", on:"#463558", pressed:"#56456b", text:"#f8edff", muted:"#cbb9dc", accent:"#d5aaff", tab:"#41325e", activeText:"#f9d8ff", radius:28},
+  rose: {label:"Rose", bg:"#24131a", card:"#40212d", on:"#603044", pressed:"#764357", text:"#fff2f5", muted:"#ddb4c5", accent:"#ff9bb8", tab:"#653149", activeText:"#ffe4ed", radius:28},
+  graphite: {label:"Graphite", bg:"#111315", card:"#262a2e", on:"#383e43", pressed:"#484f56", text:"#f0f1f2", muted:"#aeb8be", accent:"#81d5de", tab:"#394246", activeText:"#bbfaff", radius:8},
+  solar: {label:"Solaire", bg:"#f8f1da", card:"#fff9ec", on:"#fde4b4", pressed:"#ecd29d", text:"#3c2b22", muted:"#795b47", accent:"#c96522", tab:"#f6ddb2", activeText:"#7b3c1c", radius:18},
+  arctic: {label:"Arctique", bg:"#edf7fa", card:"#ffffff", on:"#d1eef7", pressed:"#b9e4ee", text:"#183246", muted:"#537588", accent:"#197ca5", tab:"#c5edf6", activeText:"#174d69", radius:22},
+  retro: {label:"Rétro", bg:"#171c17", card:"#273326", on:"#4b5236", pressed:"#5a6442", text:"#f7f2cf", muted:"#c7c49a", accent:"#d5df74", tab:"#414d2e", activeText:"#eef0a9", radius:5},
+  synthwave: {label:"Synthwave", bg:"#170e2f", card:"#291a4b", on:"#4e2166", pressed:"#6f2b86", text:"#fcddff", muted:"#d4b2ec", accent:"#ff70d9", tab:"#512164", activeText:"#ffe6ff", radius:20},
+  sand: {label:"Sable", bg:"#25231f", card:"#3b352d", on:"#5d4b38", pressed:"#6a5741", text:"#fff1d5", muted:"#dac9a8", accent:"#ffd082", tab:"#665039", activeText:"#ffe4b2", radius:16}
+};
+function paletteCss(p) {
+  return [
+    `:root { --accent: ${p.accent}; }`,
+    `body { background-color: ${p.bg}; }`,
+    `.header, .clock, .metric-value, .settings { color: ${p.text}; }`,
+    `.subtitle, .date, .status, .metric-label { color: ${p.muted}; }`,
+    `.card, .settings { background-color: ${p.card}; border-radius: ${p.radius}px; }`,
+    `.page-tab { background-color: ${p.card}; color: ${p.muted}; border-radius: 12px; }`,
+    `.page-tab.active { background-color: ${p.tab}; color: ${p.activeText}; }`,
+    `.control.on { background-color: ${p.on}; }`,
+    `.control.pressed { background-color: ${p.pressed}; }`,
+    ".accent { color: var(--accent); }"
+  ].join("\n");
+}
+for (const [id,p] of Object.entries(PALETTE_THEMES)) PRESETS[id] = paletteCss(p);
+const THEME_LABELS = {
+  original:"Original", ocean:"Océan", amber:"Ambre", light:"Clair",
+  ...Object.fromEntries(Object.entries(PALETTE_THEMES).map(([id,p])=>[id,p.label]))
+};
+const THEME_SWATCHES = {
+  original:{bg:"#10151e",card:"#1b2432",text:"#f5f7fb",accent:"#67dbba"},
+  ocean:{bg:"#071c2b",card:"#113249",text:"#b9f0ff",accent:"#58d5e7"},
+  amber:{bg:"#1a1412",card:"#2d231d",text:"#ffe4b7",accent:"#ffb25c"},
+  light:{bg:"#ebf2f5",card:"#ffffff",text:"#1c3445",accent:"#167b72"}
+};
+const SHAPES = {
+  standard: {label:"Standard", radius:20},
+  square: {label:"Anguleux", radius:4},
+  subtle: {label:"Discret", radius:12},
+  soft: {label:"Arrondi", radius:28},
+  bubble: {label:"Bulle", radius:36}
+};
+const TYPOGRAPHY = {
+  standard: {label:"Standard"},
+  compact: {label:"Compact",clock:32,heading:30,value:28},
+  large: {label:"Grande lisibilité",clock:52,heading:40,value:42}
+};
+const DESIGN_START = "/* HA Frame Studio design */";
+const DESIGN_END = "/* Fin HA Frame Studio design */";
+function removeDesign(css) {
+  return String(css || "").replace(/\/\* HA Frame Studio design \*\/[\s\S]*?\/\* Fin HA Frame Studio design \*\//g, "").trim();
+}
+function readDesignBlock(css) {
+  const found = String(css || "").match(/\/\* HA Frame Studio design \*\/([\s\S]*?)\/\* Fin HA Frame Studio design \*\//);
+  return found ? found[1] : "";
+}
+function readShape(css) {
+  const m = readDesignBlock(css).match(/\.card, \.settings \{ border-radius: (\d+)px; \}/);
+  return Object.keys(SHAPES).find(k=>m && SHAPES[k].radius === Number(m[1])) || "standard";
+}
+function readTypography(css) {
+  const m = readDesignBlock(css).match(/\.clock \{ font-size: (\d+)px; \}/);
+  return Object.keys(TYPOGRAPHY).find(k=>m && TYPOGRAPHY[k].clock === Number(m[1])) || "standard";
+}
+function withDesign(css, shape, typography) {
+  if (!SHAPES[shape] || !TYPOGRAPHY[typography]) throw new Error("Design inconnu");
+  const base = removeDesign(css);
+  if (shape === "standard" && typography === "standard") return base;
+  const changes = [];
+  if (shape !== "standard") {
+    const radius = SHAPES[shape].radius;
+    changes.push(`.card, .settings { border-radius: ${radius}px; }`);
+    changes.push(`.page-tab { border-radius: ${Math.round(radius/2)}px; }`);
+  }
+  if (typography !== "standard") {
+    const t = TYPOGRAPHY[typography];
+    changes.push(`.clock { font-size: ${t.clock}px; }`);
+    changes.push(`.header { font-size: ${t.heading}px; }`);
+    changes.push(`.metric-value { font-size: ${t.value}px; }`);
+  }
+  return [base, DESIGN_START, ...changes, DESIGN_END].filter(Boolean).join("\n");
+}
+function withShape(css, shape) { return withDesign(css, shape, readTypography(css)); }
+function withTypography(css, typography) { return withDesign(css, readShape(css), typography); }
+
+const LAYOUT_TEMPLATES = [
+  {id:"overview", name:"Vue générale", columns:3, tiles:[
+    ["metric","Température"], ["metric","Humidité"], ["metric","Puissance"],
+    ["light","Salon"], ["control","Mode maison"], ["cover","Volets"]]},
+  {id:"climate", name:"Climat", columns:2, tiles:[
+    ["thermostat","Thermostat"], ["metric","Intérieur"],
+    ["metric","Extérieur"], ["gauge","Humidité"]]},
+  {id:"energy", name:"Énergie", columns:3, tiles:[
+    ["metric","Puissance"], ["metric","Consommation"], ["metric","Production"],
+    ["gauge","Batterie"], ["metric","Énergie du jour"], ["control","Mode éco"]]},
+  {id:"lights", name:"Éclairages", columns:3, tiles:[
+    ["light","Salon"], ["light","Cuisine"], ["light","Bureau"],
+    ["light","Chambre"], ["light","Extérieur"], ["light","Ambiance"]]},
+  {id:"security", name:"Sécurité", columns:3, tiles:[
+    ["control","Alarme"], ["metric","Entrée"], ["metric","Garage"],
+    ["cover","Porte garage"], ["light","Extérieur"], ["metric","Présence"]]},
+  {id:"dense", name:"12 tuiles", columns:4, tiles:Array.from({length:12}, (_,i)=>["metric","Capteur "+(i+1)])}
+];
+function templatePage(template) {
+  return {
+    title: template.name, columns: template.columns,
+    cards: template.tiles.map(([type,label])=>({type,label,entity_id:"",min:0,max:100}))
+  };
+}
+
 const STYLE = [
   ":host{display:block;color:var(--primary-text-color,#223047);font:inherit;min-width:0}",
   "ha-card{display:block;overflow:hidden;padding:0;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:18px}",
@@ -78,6 +191,18 @@ const STYLE = [
   ".inspector-head strong{font-size:15px}.field{display:grid;gap:5px;margin-bottom:12px;font-size:12px}",
   ".field input,.field select,.field textarea{width:100%;font-size:13px}.field textarea{min-height:180px;resize:vertical;font-family:ui-monospace,monospace}",
   ".hint{font-size:12px;line-height:1.5;opacity:.65}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}",
+  ".theme-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:16px}",
+  ".theme-choice{display:flex;flex-direction:column;gap:6px;align-items:stretch;padding:7px;text-align:left;min-width:0}",
+  ".theme-choice.active{outline:2px solid var(--primary-color,#327dc5);outline-offset:1px}",
+  ".theme-sample{display:flex;align-items:center;gap:7px;height:50px;border-radius:8px;padding:8px;background:var(--sample-bg,#10151e);color:var(--sample-text,#fff)}",
+  ".theme-sample i{display:block;width:27px;height:28px;border-radius:7px;background:var(--sample-card,#1b2432);border-left:5px solid var(--sample-accent,#67dbba)}",
+  ".theme-choice span{font-size:12px;font-weight:600}",
+  ".layout-gallery{display:grid;gap:8px;margin:14px 0}",
+  ".layout-choice{padding:12px;border:1px solid var(--divider-color,#ddd);border-radius:10px}",
+  ".layout-choice strong{font-size:13px}.layout-choice .actions{margin-top:8px}",
+  ".layout-thumb{display:grid;gap:4px;width:95px;height:45px;margin-top:8px}",
+  ".layout-thumb i{background:var(--primary-color,#327dc5);opacity:.35;border-radius:3px}",
+  ".section-hint{font-size:11px;opacity:.72;margin:8px 0}",
   ".pagebar{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px}",
   ".page{font-size:12px;padding:6px 11px}.page.active{background:var(--primary-color,#327dc5);color:#fff}",
   ".footer{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 17px;border-top:1px solid var(--divider-color,#ddd)}",
@@ -95,7 +220,7 @@ const attr = (object) => Object.entries(object).map(([key, val]) => key + ":" + 
 function nativeCss(css) {
   const result = {};
   const vars = {};
-  for (const match of String(css || "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  for (const match of String(css || "").replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selectors = match[1].split(",").map((item) => item.trim());
     const declarations = match[2].split(";");
     for (const item of declarations) {
@@ -250,7 +375,7 @@ class HaFrameVisualEditor extends HTMLElement {
       this._frameOptions() + "</select><button data-action='reload' title='Relire la configuration du cadre'>↻ Actualiser</button></div></div>" +
       "<div class='row toolbar'>" +
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
-      "<button data-action='page-panel'>Page</button>" +
+      "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
       "<span class='spacer'></span><label>" + esc(page.cards.length) + "/" + esc(page.columns*3) + " tuiles</label></div></div>" +
       "<div class='content'><div class='canvas-area'>" +
@@ -302,14 +427,18 @@ class HaFrameVisualEditor extends HTMLElement {
       } else if (tile.type === "control") {
         value = isOn ? "Activé" : raw === "off" ? "Désactivé" : raw;
       }
-      const cls = tile.type === "metric" || tile.type === "gauge" ? ".metric" : ".control";
-      const css = combine(rules, cls, cls + "-" + (i+1), isOn ? ".control.on" : "");
+      const slot = tile.type === "metric"
+        ? ".metric-" + page.cards.slice(0,i+1).filter(t=>t.type==="metric").length
+        : ".control-" + page.cards.slice(0,i+1).filter(t=>t.type!=="metric").length;
+      const css = combine(rules, ".card", "." + tile.type, slot, isOn ? ".control.on" : "");
+      const labelCss = combine(rules, ".metric-label");
+      const valueCss = combine(rules, ".metric-value");
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%'></i></div>";
       return "<div class='screen-tile" + (this._tile===i?" selected":"") + "' data-tile='" + i +
         "' role='button' tabindex='0' draggable='true' style='" + css + "'>" +
-        "<div class='tile-label'>" + esc(tile.label || tile.type) + "</div>" +
-        "<div class='tile-value'>" + esc(value) + "</div>" + bar +
+        "<div class='tile-label' style='" + labelCss + "'>" + esc(tile.label || tile.type) + "</div>" +
+        "<div class='tile-value' style='" + valueCss + "'>" + esc(value) + "</div>" + bar +
         "<div class='tile-hint'>" + esc(hint) + "</div></div>";
     }).join("");
     const date = new Intl.DateTimeFormat("fr-FR", {weekday:"long",day:"numeric",month:"long"}).format(new Date());
@@ -339,21 +468,50 @@ class HaFrameVisualEditor extends HTMLElement {
         esc(this._config.custom_css) + "</textarea></div>" +
         "<p class='hint'>Couleurs, tailles, poids et arrondis sont prévisualisés. Le rendu Android reste la référence et valide le CSS à l’enregistrement.</p>";
     } else if (this._panel === "appearance") {
-      const selected = Object.entries(PRESETS).find(([,css])=>css===this._config.custom_css);
-      html = "<div class='inspector-head'><strong>Apparence</strong></div>" +
+      const selectedCss = removeDesign(this._config.custom_css);
+      const selected = Object.entries(PRESETS).find(([,css]) => css === selectedCss);
+      const selectedId = selected ? selected[0] : "custom";
+      const gallery = Object.keys(PRESETS).map((id) => {
+        const p = THEME_SWATCHES[id] || PALETTE_THEMES[id];
+        const active = selectedId === id;
+        return "<button type='button' class='theme-choice" + (active ? " active" : "") +
+          "' data-preset='" + esc(id) + "' aria-pressed='" + active + "'>" +
+          "<div class='theme-sample' style='--sample-bg:" + p.bg + ";--sample-card:" +
+          p.card + ";--sample-text:" + p.text + ";--sample-accent:" + p.accent +
+          "'><i></i><i></i><i></i></div><span>" + esc(THEME_LABELS[id]) + "</span></button>";
+      }).join("");
+      html = "<div class='inspector-head'><strong>Galerie de thèmes</strong></div>" +
         "<label class='field'>Titre du cadre<input data-bind='title' maxlength='28' value='" +
         esc(this._config.dashboard_title) + "'></label>" +
-        "<label class='field'>Thème<select data-bind='preset'>" +
-        option("custom","Personnalisé",selected ? selected[0]:"custom") +
-        Object.keys(PRESETS).map(k=>option(k,({original:"Original",ocean:"Océan",amber:"Ambre",light:"Clair"})[k],
-          selected ? selected[0]:"custom")).join("") + "</select></label>" +
-        "<p class='hint'>Un thème prédéfini remplace le CSS actuel. Personnalise-le ensuite dans l’onglet CSS.</p>";
+        "<p class='section-hint'>Choisis un thème pour prévisualiser les couleurs avant d’enregistrer.</p>" +
+        "<div class='theme-gallery'>" + gallery + "</div>" +
+        (selectedId === "custom" ? "<p class='section-hint'>CSS personnalisé actuellement actif.</p>" : "") +
+        "<label class='field'>Design des tuiles<select data-bind='shape'>" +
+        Object.entries(SHAPES).map(([id,p])=>option(id,p.label,readShape(this._config.custom_css))).join("") +
+        "</select></label>" +
+        "<label class='field'>Typographie<select data-bind='typography'>" +
+        Object.entries(TYPOGRAPHY).map(([id,p])=>option(id,p.label,readTypography(this._config.custom_css))).join("") +
+        "</select></label>" +
+        "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
+    } else if (this._panel === "layouts") {
+      html = "<div class='inspector-head'><strong>Modèles de disposition</strong></div>" +
+        "<p class='hint'>Ajoute une page ou remplace la page actuelle. Les tuiles sont pré-remplies sans entités : associe-les ensuite à Home Assistant.</p>" +
+        "<div class='layout-gallery'>" + LAYOUT_TEMPLATES.map(t => {
+          const thumb = "<div class='layout-thumb' style='grid-template-columns:repeat(" + t.columns +
+            ",1fr)'>" + t.tiles.map(()=>"<i></i>").join("") + "</div>";
+          return "<div class='layout-choice'><strong>" + esc(t.name) + "</strong>" +
+            "<div class='muted'>" + t.columns + " colonnes · " + t.tiles.length + " tuiles</div>" +
+            thumb + "<div class='actions'><button class='btn-small' data-layout='" + t.id +
+            "' data-mode='add'>+ Page</button><button class='btn-small' data-layout='" + t.id +
+            "' data-mode='replace'>Remplacer</button></div></div>";
+        }).join("") + "</div>";
     } else if (this._panel === "page" || !tile) {
       html = "<div class='inspector-head'><strong>Page " + esc(this._page + 1) + "</strong></div>" +
         "<label class='field'>Nom<input data-bind='page-title' maxlength='32' value='" + esc(page.title) + "'></label>" +
         "<label class='field'>Colonnes<select data-bind='columns'>" + [2,3,4].map(n=>option(n,n+" colonnes",page.columns)).join("") +
         "</select></label><p class='hint'>Entre 1 et 4 pages, jusqu’à 3 rangées par page. Les cartes peuvent être déplacées en les faisant glisser.</p>" +
         "<div class='actions'><button data-action='page-left'>← Page</button><button data-action='page-right'>Page →</button>" +
+        "<button data-action='duplicate-page'>Dupliquer page</button>" +
         "<button data-action='delete-page' class='danger'>Supprimer page</button></div>";
     } else {
       html = "<div class='inspector-head'><strong>Tuile " + (this._tile + 1) + "</strong>" +
@@ -389,6 +547,10 @@ class HaFrameVisualEditor extends HTMLElement {
       this._panel = "page";
       this._render(); return;
     }
+    const theme = event.target.closest("[data-preset]");
+    if (theme) { this._applyPreset(theme.dataset.preset); return; }
+    const layout = event.target.closest("[data-layout]");
+    if (layout) { this._applyLayout(layout.dataset.layout, layout.dataset.mode); return; }
     const button = event.target.closest("[data-action]");
     if (button && !button.disabled) this._action(button.dataset.action);
   }
@@ -403,11 +565,19 @@ class HaFrameVisualEditor extends HTMLElement {
       this._open();
       return;
     }
-    if (target.dataset.bind === "preset" && target.value !== "custom") {
-      if (this._dirty && this._config.custom_css && !confirm("Remplacer le CSS actuel par ce thème ?")) return;
-      this._config.custom_css = PRESETS[target.value];
-      this._mark();
-      this._render();
+    if (["shape","typography"].includes(target.dataset.bind) && this._config) {
+      const next = target.dataset.bind === "shape"
+        ? withShape(this._config.custom_css, target.value)
+        : withTypography(this._config.custom_css, target.value);
+      if (next.length > 12000) {
+        this._message("CSS trop long pour modifier la forme", true); return;
+      }
+      if (next !== this._config.custom_css) {
+        this._config.custom_css = next;
+        this._mark();
+        this._render();
+      }
+      return;
     }
     if (target.dataset.bind === "columns" || target.dataset.bind === "card-type") {
       this._input(event);
@@ -437,6 +607,34 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     this._mark();
     this._preview();
+  }
+  _applyPreset(id) {
+    if (!Object.prototype.hasOwnProperty.call(PRESETS, id)) return;
+    const next = PRESETS[id];
+    if (!this._config || this._config.custom_css === next) return;
+    if (this._config.custom_css && !confirm("Remplacer le CSS actuel par ce thème ?")) return;
+    this._config.custom_css = next;
+    this._mark();
+    this._render();
+  }
+  _applyLayout(id, mode) {
+    if (!this._config) return;
+    const template = LAYOUT_TEMPLATES.find(t=>t.id === id);
+    if (!template || !["add","replace"].includes(mode)) return;
+    const next = templatePage(template);
+    if (mode === "add") {
+      if (this._config.pages.length >= 4) return this._message("4 pages maximum", true);
+      this._config.pages.push(next);
+      this._page = this._config.pages.length - 1;
+    } else {
+      if (this._pageObject().cards.length &&
+          !confirm("Remplacer la page et supprimer ses tuiles et leurs entités associées ?")) return;
+      this._config.pages[this._page] = next;
+    }
+    this._tile = -1;
+    this._panel = "page";
+    this._mark();
+    this._render();
   }
   _reorder(from,to) {
     if (from === to || from < 0 || to < 0) return;
@@ -495,7 +693,7 @@ class HaFrameVisualEditor extends HTMLElement {
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
       return this._open();
     }
-    if (action === "appearance" || action === "css") {
+    if (action === "appearance" || action === "css" || action === "layouts") {
       this._panel = action; this._tile = -1; this._render(); return;
     }
     if (action === "page-panel") {this._panel="page";this._tile=-1;this._render();return;}
@@ -503,6 +701,14 @@ class HaFrameVisualEditor extends HTMLElement {
       if (this._config.pages.length >= 4) return this._message("4 pages maximum",true);
       this._config.pages.push({title:"Page "+(this._config.pages.length+1),columns:3,cards:[]});
       this._page=this._config.pages.length-1;this._tile=-1;this._panel="page";
+    } else if (action === "duplicate-page") {
+      if (this._config.pages.length >= 4) return this._message("4 pages maximum", true);
+      const copied = clone(page);
+      copied.title = ("Copie " + copied.title).slice(0, 32);
+      this._config.pages.splice(this._page + 1, 0, copied);
+      this._page++;
+      this._tile = -1;
+      this._panel = "page";
     } else if (action === "delete-page") {
       if (this._config.pages.length < 2) return this._message("Conserve au moins une page",true);
       if (!confirm("Supprimer cette page et toutes ses tuiles ?")) return;

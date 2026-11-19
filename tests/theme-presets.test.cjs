@@ -8,7 +8,7 @@ const end = file.indexOf('\nasync function request(', start);
 assert.ok(start !== -1 && end !== -1);
 const context = vm.createContext({});
 vm.runInContext(file.slice(start, end).replace('const CSS_PRESETS', 'var CSS_PRESETS'), context);
-assert.equal(Object.keys(context.CSS_PRESETS).length, 4);
+assert.equal(Object.keys(context.CSS_PRESETS).length, 14);
 const out = process.argv[2];
 if (out) fs.writeFileSync(out, JSON.stringify(context.CSS_PRESETS, null, 2));
 for (const [key, css] of Object.entries(context.CSS_PRESETS)) {

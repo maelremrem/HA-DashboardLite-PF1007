@@ -98,7 +98,17 @@ class FrameOptionsFlow(config_entries.OptionsFlow):
                     selector.TextSelector(),
                 vol.Required("theme", default="keep"): self._select([
                     ("keep", "Keep current CSS"), ("original", "Original"),
-                    ("ocean", "Ocean"), ("amber", "Amber"), ("light", "Light")
+                    ("ocean", "Ocean"), ("amber", "Amber"), ("light", "Light"),
+                    ("midnight", "Minuit"),
+                    ("forest", "Forêt"),
+                    ("lavender", "Lavande"),
+                    ("rose", "Rose"),
+                    ("graphite", "Graphite"),
+                    ("solar", "Solaire"),
+                    ("arctic", "Arctique"),
+                    ("retro", "Rétro"),
+                    ("synthwave", "Synthwave"),
+                    ("sand", "Sable")
                 ]),
             }))
 

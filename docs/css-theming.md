@@ -9,6 +9,8 @@ HA Frame **does not use a browser/WebView** on the PF1007. Version 0.5 adds a de
 3. Open **Personnaliser avec du CSS**, choose a preset or edit the CSS textarea. You can import/export a local `.css` file.
 4. Click **Enregistrer la configuration**. Invalid selectors/properties/values are rejected with an error. Valid changes are applied to the frame immediately.
 
+Studio v1.2.0 includes a theme gallery with 14 presets, tile corner-radius controls, and text-size variants. Their output is still normal Canvas CSS: `.card`, `.page-tab`, `.clock`, `.header`, and `.metric-value`. The Studio page templates change columns and tile definitions, not CSS positioning.
+
 The selected theme is stored in the same Android private preferences as other HA Frame settings. It survives `adb install -r` and app restarts. The long-lived Home Assistant token remains in Android Keystore and is never exported with CSS.
 
 ## Available selectors
