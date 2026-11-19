@@ -954,11 +954,74 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    if (cfg.pages.some(page=>page.cards.some(tile=>MDI_REGEX.test(tile.icon || ""))) &&
+        (!frame || !/^v?1\\.(?:[1-9]|[1-9]\\d+)\\./.test(frame.version || ""))) {
+      return "Les icônes mdi: nécessitent l’APK Android v1.1.0 ou supérieur";
+    }
     if (cfg.pages.some(isAdvancedPage) && frame && frame.version &&
         !compatibleVersion(frame.version)) {
       return "Les widgets avancés, icônes et tailles requièrent l’APK Android v1.0.0 ou supérieur";
     }
     return "";
+  }
+  async _resolveIconPath(name, stateObj) {
+    const tag = stateObj ? "ha-state-icon" : "ha-icon";
+    if (typeof document === "undefined") throw new Error("Navigateur non disponible");
+    const element = document.createElement(tag);
+    element.style.cssText = "position:absolute;left:-9999px;width:24px;height:24px;pointer-events:none";
+    element.setAttribute("aria-hidden", "true");
+    if (stateObj) element.stateObj = stateObj;
+    else element.icon = name;
+    this.shadowRoot.appendChild(element);
+    try {
+      for (let attempt=0; attempt<70; attempt++) {
+        const root = element.shadowRoot;
+        const nested = root && root.querySelector("ha-icon");
+        const primary = (nested && nested.shadowRoot &&
+            nested.shadowRoot.querySelector("ha-svg-icon")) ||
+          (root && root.querySelector("ha-svg-icon"));
+        const path = primary && primary.path ||
+          (nested && nested._path) || (!stateObj && element._path);
+        if (typeof path === "string" && path.length<=8192 && path[0] === "M" &&
+            MDI_PATH_REGEX.test(path)) return path;
+        await new Promise(resolve=>setTimeout(resolve,60));
+      }
+      throw new Error("Icône introuvable dans Home Assistant : " + (name || stateObj?.entity_id || "entité"));
+    } finally {
+      element.remove();
+    }
+  }
+  async _prepareMdiConfig() {
+    const result = clone(this._config);
+    const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    const supported = frame && /^v?1\.(?:[1-9]|[1-9]\d+)\./.test(frame.version || "");
+    if (!supported) return result;
+    const resolved = new Map();
+    for (const page of result.pages) {
+      for (const tile of page.cards) {
+        if (tile.icon === "none") {
+          delete tile.icon_path;
+          continue;
+        }
+        const requested = mdiIconName(tile.icon || "") || tileAutoIcon(tile,this._hass);
+        if (!MDI_REGEX.test(requested)) continue;
+        const state = this._hass && this._hass.states && this._hass.states[tile.entity_id];
+        const auto = !tile.icon && state && !state.attributes?.icon;
+        const key = auto ? "state|" + tile.entity_id : requested;
+        let path = resolved.get(key);
+        if (!path) {
+          try { path = await this._resolveIconPath(auto ? null : requested, auto ? state : null); }
+          catch (error) {
+            if (auto) path = await this._resolveIconPath(requested, null);
+            else throw error;
+          }
+          resolved.set(key,path);
+        }
+        tile.icon_path = path;
+        if (tile.icon) tile.icon = requested;
+      }
+    }
+    return result;
   }
   async _save() {
     if (!this._dirty || this._busy) return;
@@ -967,10 +1030,15 @@ class HaFrameVisualEditor extends HTMLElement {
     this._busy = true;
     this._message("Enregistrement sur le cadre…",false);
     try {
+      const prepared = await this._prepareMdiConfig();
+      if (JSON.stringify(prepared).length > 125000) {
+        throw new Error("Configuration trop volumineuse (icônes MDI)");
+      }
       const response = await this._hass.callWS({
         type: "ha_frame/editor/save", entry_id: this._frameId,
-        revision: this._revision, config: clone(this._config)
+        revision: this._revision, config: prepared
       });
+      this._config = prepared;
       this._revision = response.revision;
       this._dirty = false;
       this._message("Enregistré sur le cadre sélectionné", false);
