@@ -17,6 +17,7 @@ class FrameOptionsFlow(config_entries.OptionsFlow):
     """Edit a frame directly from Settings > Devices & services > Configure."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.snapshot: dict = {}
         self.page_index = 0
         self.card_index = 0
