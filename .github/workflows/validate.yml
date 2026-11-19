@@ -29,6 +29,10 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Check web editor JavaScript
         run: node --check app/src/main/assets/config/app.js
+      - name: Validate Lovelace editor bundle
+        run: |
+          node --check custom_components/ha_frame/frontend/ha-frame-editor.js
+          node tests/visual-editor.test.cjs
 
   android:
     name: Android 6 native app build
