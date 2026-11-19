@@ -1,5 +1,6 @@
 package dev.maelab.haframe;
 
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 import org.json.JSONArray;
@@ -46,6 +47,7 @@ final class HaClient {
     private final AtomicBoolean redrawPending = new AtomicBoolean(false);
     private final Map<String, EntityState> states = new ConcurrentHashMap<>();
     private final Map<String, ArrayDeque<Float>> trends = new ConcurrentHashMap<>();
+    private final CameraFeed cameraFeed;
     private final Listener listener;
     private final String endpoint;
     private final String token;
@@ -94,6 +96,7 @@ final class HaClient {
         this.token = token;
         this.entities = entities;
         this.listener = listener;
+        this.cameraFeed = new CameraFeed(client, endpoint, token, this::changed);
     }
 
     EntityState get(String id) {
@@ -127,6 +130,14 @@ final class HaClient {
         }
     }
 
+    void selectCamera(String entityId) {
+        cameraFeed.select(entityId);
+    }
+
+    Bitmap cameraFrame(String entityId) {
+        return cameraFeed.frame(entityId);
+    }
+
     boolean isConnected() {
         return authenticated;
     }
@@ -138,6 +149,7 @@ final class HaClient {
     }
 
     void stop() {
+        cameraFeed.stop();
         stopped = true;
         authenticated = false;
         main.removeCallbacks(reconnect);
