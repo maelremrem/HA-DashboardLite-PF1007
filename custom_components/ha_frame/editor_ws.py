@@ -5,6 +5,7 @@ from copy import deepcopy
 import hashlib
 import json
 import logging
+import re
 
 from homeassistant.components import websocket_api
 import voluptuous as vol
@@ -18,14 +19,37 @@ _LOGGER = logging.getLogger(__name__)
 
 def layout_revision(config: dict) -> str:
     """Detect concurrent edits without storing credentials or settings in HA."""
-    selected = {key: config.get(key) for key in ("dashboard_title", "custom_css", "pages")}
+    selected = {key: config.get(key) for key in ("dashboard_title", "custom_css", "pages", "slideshow")}
     payload = json.dumps(selected, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def validate_slideshow(value: dict) -> dict:
+    """Bound sources and intervals, never accept arbitrary media URLs."""
+    if not isinstance(value, dict) or set(value) - {
+        "enabled", "idle_seconds", "interval_seconds", "show_clock", "source", "camera_entity"
+    }:
+        raise ValueError("Invalid slideshow settings")
+    if type(value.get("enabled")) is not bool or type(value.get("show_clock")) is not bool:
+        raise ValueError("Invalid slideshow flags")
+    if type(value.get("idle_seconds")) is not int or not 30 <= value["idle_seconds"] <= 3600:
+        raise ValueError("Invalid idle interval")
+    if type(value.get("interval_seconds")) is not int or not 5 <= value["interval_seconds"] <= 300:
+        raise ValueError("Invalid photo interval")
+    if value.get("source") not in {"local", "camera"}:
+        raise ValueError("Invalid photo source")
+    entity = value.get("camera_entity", "")
+    if not isinstance(entity, str) or (
+        entity and not re.fullmatch(r"camera\.[a-z0-9_]+", entity)
+    ) or (value["source"] == "camera" and not entity):
+        raise ValueError("Invalid slideshow camera")
+    return deepcopy(value)
+
+
 def validate_layout(config: dict) -> dict:
     """Permit only dashboard keys and enforce Android layout bounds."""
-    if set(config) != {"dashboard_title", "custom_css", "pages"}:
+    required = {"dashboard_title", "custom_css", "pages"}
+    if not isinstance(config, dict) or not required <= set(config) or set(config) - required - {"slideshow"}:
         raise ValueError("Unexpected configuration fields")
     title = config["dashboard_title"]
     css = config["custom_css"]
@@ -34,11 +58,14 @@ def validate_layout(config: dict) -> dict:
     if not isinstance(css, str) or len(css) > 12000:
         raise ValueError("Custom CSS must be no longer than 12000 characters")
     validate_pages(config["pages"])
-    return {
+    result = {
         "dashboard_title": title.strip(),
         "custom_css": css,
         "pages": deepcopy(config["pages"]),
     }
+    if "slideshow" in config:
+        result["slideshow"] = validate_slideshow(config["slideshow"])
+    return result
 
 
 def _entry_coordinator(hass, entry_id):
@@ -77,11 +104,14 @@ async def editor_get(hass, connection, msg):
         return
     try:
         config = await coordinator.api.config()
-        safe = validate_layout({
+        layout = {
             "dashboard_title": config["dashboard_title"],
             "custom_css": config["custom_css"],
             "pages": config["pages"],
-        })
+        }
+        if "slideshow" in config:
+            layout["slideshow"] = config["slideshow"]
+        safe = validate_layout(layout)
     except (FrameApiError, ValueError, KeyError, TypeError) as exc:
         _LOGGER.warning("Could not read HA Frame layout: %s", type(exc).__name__)
         connection.send_error(msg["id"], "unavailable", "Could not load frame configuration")
