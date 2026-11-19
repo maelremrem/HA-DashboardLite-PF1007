@@ -5,7 +5,6 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.text.TextUtils;
 import android.os.SystemClock;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -14,6 +13,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
+/** Software-drawn dashboard. Only the visible page is rendered. */
 final class DashboardView extends View {
     interface Callbacks {
         void settings();
@@ -28,6 +28,11 @@ final class DashboardView extends View {
     private static final int TEXT = 0xFFF5F7FB;
     private static final int MUTED = 0xFF94A3B8;
     private static final int ACCENT = 0xFF67DBBA;
+    private static final float GRID_X = 50f;
+    private static final float GRID_Y = 276f;
+    private static final float GRID_WIDTH = 1180f;
+    private static final float GRID_HEIGHT = 472f;
+    private static final float CELL_GAP = 15f;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
@@ -39,34 +44,35 @@ final class DashboardView extends View {
     private HaClient client;
     private Callbacks callbacks;
     private String status = "Configuration nécessaire";
-    private boolean connected = false;
+    private boolean connected;
     private float scale = 1f;
-    private float dx = 0;
-    private float dy = 0;
-    private int touchedControl = -1;
-    private int feedbackControl = -1;
+    private float dx;
+    private float dy;
+    private int pageIndex;
+    private int touchedCard = -1;
+    private int feedbackCard = -1;
+    private float startX;
+    private float startY;
     private String lastCommandId = "";
-    private long lastCommandAt = 0L;
-    private final Runnable endFeedback = () -> { feedbackControl = -1; invalidate(); };
+    private long lastCommandAt;
+    private final Runnable endFeedback = () -> { feedbackCard = -1; invalidate(); };
     private final Runnable refreshClock = new Runnable() {
         @Override public void run() {
-            // The clock sits below y=135 in design coordinates. Redraw the view so
-            // partial invalidation and display scaling cannot leave it frozen.
             invalidate();
-            long untilNextMinute = 60000L - (System.currentTimeMillis() % 60000L);
-            postDelayed(this, Math.max(250L, untilNextMinute + 100L));
+            long next = 60000L - (System.currentTimeMillis() % 60000L);
+            postDelayed(this, Math.max(250L, next + 100L));
         }
     };
 
-    DashboardView(Context context) {
-        super(context);
-    }
-
+    DashboardView(Context context) { super(context); }
     void setCallbacks(Callbacks callbacks) { this.callbacks = callbacks; }
     void setConfig(FrameConfig config) {
         this.config = config;
-        try { this.theme = CanvasTheme.parse(config.customCss); }
-        catch (IllegalArgumentException ignored) { this.theme = CanvasTheme.parse(""); }
+        pageIndex = Math.max(0, Math.min(pageIndex, config.pages.size() - 1));
+        touchedCard = -1;
+        feedbackCard = -1;
+        try { theme = CanvasTheme.parse(config.customCss); }
+        catch (IllegalArgumentException ignored) { theme = CanvasTheme.parse(""); }
         invalidate();
     }
     void setClient(HaClient client) { this.client = client; invalidate(); }
@@ -80,139 +86,184 @@ final class DashboardView extends View {
         super.onAttachedToWindow();
         refreshClock.run();
     }
-
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(refreshClock);
+        removeCallbacks(endFeedback);
         super.onDetachedFromWindow();
     }
 
-    private void rect(Canvas c, float x, float y, float w, float h, float r, int color) {
+    private void rect(Canvas c, float x, float y, float w, float h, float radius, int color) {
         paint.setColor(color);
         paint.setStyle(Paint.Style.FILL);
         bounds.set(x, y, x + w, y + h);
-        c.drawRoundRect(bounds, r, r, paint);
+        c.drawRoundRect(bounds, radius, radius, paint);
     }
 
-    private void text(Canvas c, String s, float x, float y, float size, int color, boolean bold) {
+    private void text(Canvas c, String content, float x, float y, float size,
+                      int color, boolean bold, float maxWidth) {
+        if (content == null) content = "";
         paint.setColor(color);
         paint.setStyle(Paint.Style.FILL);
         paint.setTextSize(size);
         paint.setTypeface(bold ? MEDIUM : Typeface.DEFAULT);
         paint.setTextAlign(Paint.Align.LEFT);
-        c.drawText(s, x, y, paint);
-    }
-
-    private String shortText(String s, int max) {
-        if (s == null) return "";
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
+        if (maxWidth > 0 && paint.measureText(content) > maxWidth) {
+            final String ellipsis = "…";
+            while (!content.isEmpty() && paint.measureText(content + ellipsis) > maxWidth) {
+                content = content.substring(0, content.length() - 1);
+            }
+            content += ellipsis;
+        }
+        c.drawText(content, x, y, paint);
     }
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         canvas.drawColor(theme.color(BG, "background-color", "body"));
         scale = Math.min(getWidth() / 1280f, getHeight() / 800f);
+        if (scale <= 0f) return;
         dx = (getWidth() - 1280f * scale) / 2f;
         dy = (getHeight() - 800f * scale) / 2f;
         canvas.save();
         canvas.translate(dx, dy);
         canvas.scale(scale, scale);
-        text(canvas, shortText(config.title, 28), 50, 66,
-            theme.size(36, "font-size", ".header"),
-            theme.color(TEXT, "color", ".header"), theme.bold(true, ".header"));
-        text(canvas, "Tableau de bord", 52, 101,
-            theme.size(19, "font-size", ".subtitle"), theme.color(MUTED, "color", ".subtitle"),
-            theme.bold(false, ".subtitle"));
-        rect(canvas, 865, 35, 12, 12, 6,
-            connected ? theme.color(ACCENT, "color", ".accent") : 0xFFFFB56A);
-        text(canvas, shortText((connected ? "" : "↻ ") + status, 23), 890, 47,
-            theme.size(17, "font-size", ".status"), theme.color(MUTED, "color", ".status"), false);
+        text(canvas, config.title, 50, 66, theme.size(36, "font-size", ".header"),
+            theme.color(TEXT, "color", ".header"), theme.bold(true, ".header"), 580);
+        text(canvas, "Tableau de bord", 52, 101, theme.size(19, "font-size", ".subtitle"),
+            theme.color(MUTED, "color", ".subtitle"), false, 600);
+        rect(canvas, 865, 35, 12, 12, 6, connected ? theme.color(ACCENT, "color", ".accent") : 0xFFFFB56A);
+        text(canvas, (connected ? "" : "↻ ") + status, 890, 47,
+            theme.size(17, "font-size", ".status"), theme.color(MUTED, "color", ".status"), false, 226);
         rect(canvas, 1130, 23, 105, 58, theme.size(18, "border-radius", ".settings"),
             theme.color(PANEL, "background-color", ".settings"));
-        text(canvas, "RÉGLAGES", 1144, 60, 17,
-            theme.color(TEXT, "color", ".settings"), true);
+        text(canvas, "RÉGLAGES", 1144, 60, 17, theme.color(TEXT, "color", ".settings"), true, 90);
         text(canvas, clock.format(new Date()), 52, 171,
             theme.size(40, "font-size", ".clock"), theme.color(TEXT, "color", ".clock"),
-            theme.bold(true, ".clock"));
+            theme.bold(true, ".clock"), 190);
         text(canvas, date.format(new Date()), 245, 165,
-            theme.size(19, "font-size", ".date"), theme.color(MUTED, "color", ".date"),
-            theme.bold(false, ".date"));
-        text(canvas, "CAPTEURS", 52, 219, 18,
-            theme.color(MUTED, "color", ".section"), true);
-        for (int i = 0; i < FrameConfig.METRICS; i++) drawMetric(canvas, i);
-        text(canvas, "COMMANDES", 52, 426, 18,
-            theme.color(MUTED, "color", ".section"), true);
-        for (int i = 0; i < FrameConfig.CONTROLS; i++) drawControl(canvas, i);
+            theme.size(19, "font-size", ".date"), theme.color(MUTED, "color", ".date"), false, 470);
+
+        if (config.pages.isEmpty()) {
+            text(canvas, "Configurer une page depuis le serveur web", 54, 355, 26, MUTED, true, 1050);
+        } else {
+            drawTabs(canvas);
+            drawCards(canvas, config.pages.get(pageIndex));
+        }
         canvas.restore();
     }
 
-    private void drawMetric(Canvas c, int index) {
-        float x = 50 + index * 394;
-        float y = 237;
-        String slot = ".metric-" + (index + 1);
-        rect(c, x, y, 376, 145, theme.size(20, "border-radius", ".metric", slot),
-            theme.color(PANEL, "background-color", ".metric", slot));
-        text(c, shortText(config.labels[index], 21), x + 22, y + 40,
-            theme.size(21, "font-size", ".metric-label", slot),
-            theme.color(MUTED, "color", ".metric-label", slot),
-            theme.bold(false, ".metric-label", slot));
-        String value = "À configurer";
-        int color = 0xFF78879D;
-        String entity = config.ids[index];
-        if (!entity.isEmpty()) {
-            HaClient.EntityState state = client == null ? null : client.get(entity);
-            if (!connected) value = "Hors ligne";
-            else if (state == null) value = "En attente…";
-            else if (state.state.equals("unknown") || state.state.equals("unavailable")) value = "Indisponible";
-            else {
-                value = state.state;
-                if (!state.unit().isEmpty()) value += " " + state.unit();
-                color = TEXT;
+    private void drawTabs(Canvas canvas) {
+        int count = config.pages.size();
+        float width = (GRID_WIDTH - (count - 1) * 10f) / count;
+        for (int i = 0; i < count; i++) {
+            boolean active = i == pageIndex;
+            float x = GRID_X + i * (width + 10);
+            float radius = theme.size(14, "border-radius", ".page-tab", active ? ".page-tab.active" : ".page-tab");
+            int background = theme.color(active ? PANEL_ON : PANEL, "background-color",
+                ".page-tab", active ? ".page-tab.active" : ".page-tab");
+            rect(canvas, x, 211, width, 46, radius, background);
+            text(canvas, config.pages.get(i).title, x + 17, 240,
+                theme.size(18, "font-size", ".page-tab", active ? ".page-tab.active" : ".page-tab"),
+                theme.color(active ? ACCENT : MUTED, "color", ".page-tab", active ? ".page-tab.active" : ".page-tab"),
+                active, width - 34);
+        }
+    }
+
+    private int columns(FrameConfig.Page page) { return Math.max(2, Math.min(4, page.columns)); }
+    private int rows(FrameConfig.Page page) {
+        return Math.max(1, (page.cards.size() + columns(page) - 1) / columns(page));
+    }
+    private float cardWidth(FrameConfig.Page page) {
+        return (GRID_WIDTH - (columns(page) - 1) * CELL_GAP) / columns(page);
+    }
+    private float cardHeight(FrameConfig.Page page) {
+        return Math.min(183f, (GRID_HEIGHT - (rows(page) - 1) * CELL_GAP) / rows(page));
+    }
+    private float cardLeft(FrameConfig.Page page, int index) {
+        return GRID_X + (index % columns(page)) * (cardWidth(page) + CELL_GAP);
+    }
+    private float cardTop(FrameConfig.Page page, int index) {
+        return GRID_Y + (index / columns(page)) * (cardHeight(page) + CELL_GAP);
+    }
+
+    private void drawCards(Canvas canvas, FrameConfig.Page page) {
+        if (page.cards.isEmpty()) {
+            text(canvas, "Cette page est vide", GRID_X + 18, GRID_Y + 75, 27, MUTED, false, 700);
+            return;
+        }
+        int metricNumber = 0;
+        int controlNumber = 0;
+        for (int i = 0; i < page.cards.size(); i++) {
+            FrameConfig.Card card = page.cards.get(i);
+            boolean metric = "metric".equals(card.type);
+            String slot = metric ? ".metric-" + (++metricNumber) : ".control-" + (++controlNumber);
+            float x = cardLeft(page, i);
+            float y = cardTop(page, i);
+            float w = cardWidth(page);
+            float h = cardHeight(page);
+            HaClient.EntityState state = card.entityId.isEmpty() || client == null ? null : client.get(card.entityId);
+            boolean on = connected && state != null &&
+                ("on".equals(state.state) || "open".equals(state.state) || "playing".equals(state.state));
+            boolean pressed = !metric && (touchedCard == i || feedbackCard == i);
+            String category = metric ? ".metric" : ".control";
+            String modifier = metric ? category : pressed ? ".control.pressed" : on ? ".control.on" : category;
+            rect(canvas, x, y, w, h,
+                theme.size(20, "border-radius", ".card", category, slot),
+                theme.color(pressed ? PANEL_PRESSED : on ? PANEL_ON : PANEL,
+                    "background-color", ".card", category, slot, modifier));
+            if (metric) {
+                text(canvas, card.label, x + 20, y + 37,
+                    theme.size(20, "font-size", ".metric-label", slot),
+                    theme.color(MUTED, "color", ".metric-label", slot), false, w - 40);
+                String value = "À configurer";
+                int color = 0xFF78879D;
+                if (!card.entityId.isEmpty()) {
+                    if (!connected) value = "Hors ligne";
+                    else if (state == null) value = "En attente…";
+                    else if ("unknown".equals(state.state) || "unavailable".equals(state.state)) value = "Indisponible";
+                    else {
+                        value = state.state + (state.unit().isEmpty() ? "" : " " + state.unit());
+                        color = TEXT;
+                    }
+                }
+                text(canvas, value, x + 20, y + h - 26,
+                    theme.size(34, "font-size", ".metric-value", slot),
+                    theme.color(color, "color", ".metric-value", slot), true, w - 40);
+            } else {
+                rect(canvas, x + 20, y + 26, 12, 12, 6,
+                    on ? theme.color(ACCENT, "color", ".accent") : 0xFF66768D);
+                text(canvas, card.label, x + 46, y + 41,
+                    theme.size(23, "font-size", ".control-label", slot),
+                    theme.color(TEXT, "color", ".control-label", slot), true, w - 65);
+                String secondary = card.entityId.isEmpty() ? "À configurer" :
+                    !connected ? "Hors ligne" : state == null ? "En attente…" : state.state;
+                if ("on".equals(secondary)) secondary = "Allumé";
+                else if ("off".equals(secondary)) secondary = "Éteint";
+                text(canvas, secondary, x + 22, y + h - 26,
+                    theme.size(19, "font-size", ".control-state", slot),
+                    theme.color(MUTED, "color", ".control-state", slot), false, w - 42);
             }
         }
-        text(c, shortText(value, 23), x + 22, y + 109,
-            theme.size(36, "font-size", ".metric-value", slot),
-            theme.color(color, "color", ".metric-value", slot),
-            theme.bold(true, ".metric-value", slot));
     }
 
-    private void drawControl(Canvas c, int index) {
-        int i = FrameConfig.METRICS + index;
-        int col = index % 3;
-        int row = index / 3;
-        float x = 50 + col * 394;
-        float y = 446 + row * 154;
-        String entity = config.ids[i];
-        HaClient.EntityState state = entity.isEmpty() || client == null ? null : client.get(entity);
-        String actual = state == null ? "" : state.state;
-        boolean on = connected && ("on".equals(actual) || "open".equals(actual) || "playing".equals(actual));
-        String slot = ".control-" + (index + 1);
-        boolean pressed = touchedControl == index || feedbackControl == index;
-        String stateSelector = pressed ? ".control.pressed" : on ? ".control.on" : ".control";
-        int defaultColor = pressed ? PANEL_PRESSED : on ? PANEL_ON : PANEL;
-        rect(c, x, y, 376, 133, theme.size(20, "border-radius", ".control", slot),
-            theme.color(defaultColor, "background-color", ".control", slot, stateSelector));
-        rect(c, x + 22, y + 24, 12, 12, 6,
-            on ? theme.color(ACCENT, "color", ".accent") : 0xFF66768D);
-        text(c, shortText(config.labels[i], 24), x + 50, y + 39,
-            theme.size(25, "font-size", ".control-label", slot),
-            theme.color(TEXT, "color", ".control-label", slot),
-            theme.bold(true, ".control-label", slot));
-        String secondary = entity.isEmpty() ? "À configurer" : (!connected ? "Hors ligne" : (state == null ? "En attente…" : actual));
-        if ("on".equals(secondary)) secondary = "Allumé";
-        if ("off".equals(secondary)) secondary = "Éteint";
-        text(c, shortText(secondary, 28), x + 23, y + 94,
-            theme.size(19, "font-size", ".control-state", slot),
-            theme.color(MUTED, "color", ".control-state", slot),
-            theme.bold(false, ".control-state", slot));
-    }
-
-    private int controlAt(float x, float y) {
-        for (int index = 0; index < FrameConfig.CONTROLS; index++) {
-            float left = 50 + (index % 3) * 394;
-            float top = 446 + (index / 3) * 154;
-            if (x >= left && x <= left + 376 && y >= top && y <= top + 133) return index;
+    private int cardAt(float x, float y) {
+        if (config.pages.isEmpty()) return -1;
+        FrameConfig.Page page = config.pages.get(pageIndex);
+        for (int i = 0; i < page.cards.size(); i++) {
+            float left = cardLeft(page, i);
+            float top = cardTop(page, i);
+            if (x >= left && x <= left + cardWidth(page) && y >= top && y <= top + cardHeight(page)) return i;
         }
         return -1;
+    }
+
+    private void selectPage(int index) {
+        if (index < 0 || index >= config.pages.size() || index == pageIndex) return;
+        pageIndex = index;
+        touchedCard = -1;
+        feedbackCard = -1;
+        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        invalidate();
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
@@ -221,49 +272,55 @@ final class DashboardView extends View {
         float y = (event.getY() - dy) / scale;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                touchedControl = controlAt(x, y);
-                invalidate();
-                return true;
-            case MotionEvent.ACTION_CANCEL:
-                touchedControl = -1;
+                startX = x;
+                startY = y;
+                touchedCard = cardAt(x, y);
                 invalidate();
                 return true;
             case MotionEvent.ACTION_MOVE:
-                // Prevent swiping across multiple tiles from sending commands.
-                if (touchedControl != -1 && controlAt(x, y) != touchedControl) {
-                    touchedControl = -1;
+                if (Math.abs(x - startX) > 26 || Math.abs(y - startY) > 26) {
+                    touchedCard = -1;
                     invalidate();
                 }
                 return true;
-            case MotionEvent.ACTION_UP:
-                int tappedControl = touchedControl;
-                touchedControl = -1;
+            case MotionEvent.ACTION_CANCEL:
+                touchedCard = -1;
                 invalidate();
+                return true;
+            case MotionEvent.ACTION_UP:
+                int selected = touchedCard;
+                touchedCard = -1;
+                invalidate();
+                if (config.pages.size() > 1 && Math.abs(x - startX) > 95 &&
+                    Math.abs(x - startX) > Math.abs(y - startY) * 1.3f && startY > 205) {
+                    selectPage(pageIndex + (x < startX ? 1 : -1));
+                    return true;
+                }
                 if (callbacks == null) return true;
-                if (x >= 1122 && y >= 18 && y <= 95) {
-                    callbacks.settings();
+                if (x >= 1122 && y >= 18 && y <= 95) { callbacks.settings(); return true; }
+                if (x >= 855 && x < 1122 && y >= 16 && y <= 100) { callbacks.retryConnection(); return true; }
+                if (y >= 211 && y <= 257 && x >= GRID_X && x <= GRID_X + GRID_WIDTH &&
+                    !config.pages.isEmpty()) {
+                    int count = config.pages.size();
+                    float width = (GRID_WIDTH - (count - 1) * 10f) / count;
+                    int index = (int) ((x - GRID_X) / (width + 10f));
+                    if (index < count && x <= GRID_X + index * (width + 10f) + width) selectPage(index);
                     return true;
                 }
-                if (x >= 855 && x < 1122 && y >= 16 && y <= 100) {
-                    callbacks.retryConnection();
-                    return true;
-                }
-                if (tappedControl < 0 || tappedControl != controlAt(x, y)) return true;
-                String entity = config.ids[FrameConfig.METRICS + tappedControl];
-                if (TextUtils.isEmpty(entity)) {
-                    callbacks.settings();
-                    return true;
-                }
+                if (selected < 0 || selected != cardAt(x, y)) return true;
+                FrameConfig.Card card = config.pages.get(pageIndex).cards.get(selected);
+                if (!"control".equals(card.type)) return true;
+                if (card.entityId.isEmpty()) { callbacks.settings(); return true; }
                 long now = SystemClock.elapsedRealtime();
-                if (entity.equals(lastCommandId) && now - lastCommandAt < 700L) return true;
-                lastCommandId = entity;
+                if (card.entityId.equals(lastCommandId) && now - lastCommandAt < 700L) return true;
+                lastCommandId = card.entityId;
                 lastCommandAt = now;
-                feedbackControl = tappedControl;
+                feedbackCard = selected;
                 removeCallbacks(endFeedback);
                 postDelayed(endFeedback, 180L);
                 invalidate();
                 performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                callbacks.command(entity);
+                callbacks.command(card.entityId);
                 return true;
             default:
                 return true;

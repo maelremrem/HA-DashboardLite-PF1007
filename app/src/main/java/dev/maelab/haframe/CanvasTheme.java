@@ -20,7 +20,10 @@ final class CanvasTheme {
         ".metric|.metric-label|.metric-value|.control|.control.on|.control.pressed|" +
         ".control-label|.control-state|.accent|" +
         ".metric-1|.metric-2|.metric-3|" +
-        ".control-1|.control-2|.control-3|.control-4|.control-5|.control-6|";
+        ".control-1|.control-2|.control-3|.control-4|.control-5|.control-6|" +
+        ".metric-4|.metric-5|.metric-6|.metric-7|.metric-8|.metric-9|.metric-10|.metric-11|.metric-12|" +
+        ".control-7|.control-8|.control-9|.control-10|.control-11|.control-12|" +
+        ".card|.page-tab|.page-tab.active|";
 
     private final Map<String, Map<String, String>> rules = new HashMap<>();
     private final Map<String, String> variables = new HashMap<>();

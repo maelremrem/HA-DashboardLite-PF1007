@@ -37,8 +37,6 @@ public final class SettingsActivity extends Activity {
         }
     };
     private EditText token;
-    private final EditText[] labels = new EditText[FrameConfig.COUNT];
-    private final EditText[] entities = new EditText[FrameConfig.COUNT];
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -106,23 +104,9 @@ public final class SettingsActivity extends Activity {
         add(root, text("Token chiffré avec Android Keystore. Utiliser HTTPS lorsque possible ; ne jamais exposer le token.",
             13, 0xFF91A1B5), 20);
 
-        add(root, text("3 CAPTEURS", 20, 0xFF6BA8FF), 10);
-        for (int i = 0; i < FrameConfig.COUNT; i++) {
-            if (i == FrameConfig.METRICS) add(root, text("6 COMMANDES", 20, 0xFF6BA8FF), 12);
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            labels[i] = field("Titre", current.labels[i]);
-            entities[i] = field("sensor.xxx / light.xxx", current.ids[i]);
-            LinearLayout.LayoutParams a = new LinearLayout.LayoutParams(0, -2, 1);
-            LinearLayout.LayoutParams b = new LinearLayout.LayoutParams(0, -2, 2);
-            b.leftMargin = dp(12);
-            row.addView(labels[i], a);
-            row.addView(entities[i], b);
-            add(root, row, 6);
-        }
-
-        add(root, text("Commandes prises en charge : light, switch, fan, input_boolean, cover, scene, script, button, input_button.",
-            13, 0xFF91A1B5), 18);
+        add(root, text("PAGES ET CARTES", 20, 0xFF6BA8FF), 10);
+        add(root, text("Gère les pages, les capteurs, les commandes et la disposition depuis le serveur web. " +
+            "Le dashboard reste une application Android native sans WebView.", 14, 0xFF91A1B5), 18);
         Button save = new Button(this);
         save.setText("ENREGISTRER ET CONNECTER");
         save.setOnClickListener(v -> save());
@@ -187,14 +171,6 @@ public final class SettingsActivity extends Activity {
             token.setError("Token obligatoire");
             return;
         }
-        for (int i = 0; i < FrameConfig.COUNT; i++) {
-            next.labels[i] = labels[i].getText().toString().trim();
-            next.ids[i] = entities[i].getText().toString().trim();
-            if (!next.ids[i].isEmpty() && !next.ids[i].matches("[a-z0-9_]+\\.[a-z0-9_]+")) {
-                entities[i].setError("Exemple : light.salon");
-                return;
-            }
-        }
         try {
             if (!inputToken.isEmpty()) TokenVault.save(this, inputToken);
             else TokenVault.load(this);
@@ -202,7 +178,12 @@ public final class SettingsActivity extends Activity {
             Toast.makeText(this, "Keystore indisponible : " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
             return;
         }
-        next.save(this);
+        try {
+            next.save(this);
+        } catch (Exception e) {
+            Toast.makeText(this, "Configuration invalide : " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
         Toast.makeText(this, "Configuration enregistrée", Toast.LENGTH_SHORT).show();
         finish();
     }

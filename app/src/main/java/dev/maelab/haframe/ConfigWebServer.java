@@ -223,16 +223,12 @@ final class ConfigWebServer {
                 jsonError(output, 401, "Non autorisé");
             } else if ("GET".equals(req.method) && "/api/config".equals(req.path)) {
                 FrameConfig config = FrameConfig.load(context);
-                JSONArray slots = new JSONArray();
-                for (int i = 0; i < FrameConfig.COUNT; i++) {
-                    slots.put(new JSONObject().put("label", config.labels[i]).put("entity_id", config.ids[i]));
-                }
                 json(output, 200, new JSONObject()
                     .put("url", config.baseUrl)
                     .put("dashboard_title", config.title)
                     .put("custom_css", config.customCss)
                     .put("token_set", TokenVault.hasToken(context))
-                    .put("slots", slots), null);
+                    .put("pages", config.pagesJson()), null);
             } else if ("GET".equals(req.method) && "/api/entities".equals(req.path)) {
                 json(output, 200, fetchEntities(), null);
             } else if ("POST".equals(req.method) && "/api/config".equals(req.path)) {
@@ -359,17 +355,7 @@ final class ConfigWebServer {
         String customCss = body.optString("custom_css", config.customCss);
         CanvasTheme.parse(customCss);
         config.customCss = customCss;
-        JSONArray slots = body.getJSONArray("slots");
-        if (slots.length() != FrameConfig.COUNT) throw new IllegalArgumentException("Nombre de cartes incorrect");
-        for (int i = 0; i < FrameConfig.COUNT; i++) {
-            JSONObject slot = slots.getJSONObject(i);
-            config.labels[i] = slot.optString("label", "").trim();
-            config.ids[i] = slot.optString("entity_id", "").trim();
-            if (config.labels[i].length() > 48 ||
-                (!config.ids[i].isEmpty() && !config.ids[i].matches("[a-z0-9_]+\\.[a-z0-9_]+"))) {
-                throw new IllegalArgumentException("Carte invalide");
-            }
-        }
+        config.setPages(body.getJSONArray("pages"));
         String incomingToken = body.optString("token", "").trim();
         if (!incomingToken.isEmpty()) {
             if (incomingToken.length() > 4096) throw new IllegalArgumentException("Token trop long");

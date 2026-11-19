@@ -1,6 +1,23 @@
-# HA Frame — PF1007 native dashboard (v0.5)
+# HA Frame — PF1007 native dashboard (v0.6)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
+
+## V0.6 — Dynamic pages and cards
+
+The Android dashboard is still rendered with **Canvas** (no WebView). The built-in web editor now supports:
+
+- **1–4 pages** with editable titles, order, and swipe/tap navigation on the frame.
+- **0–12 cards per page** (depending on columns: 2 = 6 cards, 3 = 9, 4 = 12; always 3 rows maximum).
+- A freely ordered mix of **sensor cards** and **touch command cards**; cards can be added, removed, reordered, and searched by Home Assistant friendly name or entity ID.
+- Per-page grid settings (2/3/4 columns) with a consistent touch target size.
+- Native CSS styles for `.card`, `.page-tab`, `.page-tab.active` and ordinal selectors through `.metric-12` / `.control-12`.
+- **Automatic migration** of the previous 3 sensors + 6 commands into the first page named `Maison`; existing labels, entity IDs, CSS, URL and encrypted token are preserved. No data wipe and no APK package change.
+
+To edit the new layout: open **Settings → Start web server** on the PF1007, then visit the displayed address from a trusted LAN computer, enter its six-digit PIN, configure pages/cards, and save. The web server is off by default and expires in 15 minutes. See [Pages and layout](docs/pages-and-layout.md) and [CSS guide](docs/css-theming.md).
+
+**Safety:** Native control cards support `light`, `switch`, `fan`, `input_boolean`, `cover`, `scene`, `script`, `button` and `input_button`. The browser's picker filters to these domains for action cards. Never expose the HTTP configuration server to the public Internet; it does not return the stored Home Assistant token.
+
+**Testing:** `./tests/test-css.sh` validates the native CSS parser, bundled theme presets and dynamic web-model limits on a development machine. Android compilation and real PF1007 behavior still require validation on the device.
 
 **Not a WebView, not Lovelace, not Fully Kiosk.** The UI uses Android Canvas (software-rendered, updated only on state changes and clock ticks). The networking layer uses a single persistent WebSocket connection to Home Assistant, requesting only the configured entities via `subscribe_entities`. No animations, background sync service, or external assets.
 
@@ -9,24 +26,23 @@ A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the P
 - [ADB access and Wi-Fi setup](docs/adb-access.md)
 - [Vendor app debloat, backup and security audit](docs/debloat-security.md)
 - [Fedora 44 Android development setup](docs/fedora-build.md)
-- [Customize dashboard with native CSS](docs/css-theming.md)
+- [CSS customization guide (native Canvas)](docs/css-theming.md)
+- [Pages and dynamic layout](docs/pages-and-layout.md)
 
-## Changes in v0.5.0 — native CSS styles
+## Changes in v0.5.0 — native CSS themes
 
-- **Native CSS subset, no WebView:** change dashboard colors, text size/weight and card corner radius without sacrificing Canvas performance. Unsupported CSS is rejected instead of ignored.
-- **Four themes:** Original, Ocean, Amber and Light, available from the temporary local web editor.
-- **Custom CSS editor:** edit, import and export `.css` files from the browser; apply styles to individual sensor or command cards.
-- **Configurable dashboard title** and persistent theme settings.
-- **Keeps existing data:** same Android package ID `dev.maelab.haframe`, saved Home Assistant entity assignments, URL and encrypted token remain unchanged when upgrading with `adb install -r`.
-- **Tests:** `bash tests/test-css.sh` exercises the pure-Java CSS parser, predefined themes and existing web reorder behavior.
+- **CSS customization without WebView:** strict CSS subset interpreted by the native Canvas renderer; supported selectors include `body`, `.clock`, `.metric-1`, `.control.on` and more. Customize colors, font sizes/weights and card corner radii. Unsupported CSS is rejected with an error.
+- **Presets:** Original, Ocean, Amber and Light. Apply a preset from the local web configuration editor, or author custom CSS.
+- **Theme import/export:** upload or download a `.css` file from the web editor, without involving an external service. A 12,000-character limit bounds parsing and storage.
+- **Custom dashboard title** from the same editor.
+- **Compatibility:** the Android package name remains `dev.maelab.haframe`. Existing Home Assistant URL, encrypted token, entity IDs and card ordering are preserved with `adb install -r`.
+- **Tests:** pure-Java parser tests, preset validation, JavaScript syntax and existing slot-order tests. Android build/hardware validation is still required.
 
-See the [CSS theme guide](docs/css-theming.md) for supported selectors/properties. This is not full browser CSS; HTML layout, remote images, external stylesheets and animations are intentionally unsupported.
-
-**Validation:** pure Java and browser tests pass locally; Android APK compilation and physical PF1007 testing are still required.
+See [CSS theming documentation](docs/css-theming.md) for the supported syntax, selectors and examples. **Full browser CSS/HTML is not supported**; the goal is to keep the PF1007 fast.
 
 ## Changes in v0.4.0 — touch and reliability
 
-- **Faster redraws:** incoming Home Assistant state bursts are coalesced into one native Canvas redraw every ~80 ms, rather than invalidating for every network message.
+- **Faster redraws:** incoming Home Assistant state bursts are coalesced into one native Canvas redraw every ~80 ms, and unchanged connection-status counters no longer trigger full redraws.
 - **Safer touch actions:** tiles visibly react while pressed, give haptic feedback when available, and suppress duplicate commands to the same entity within 700 ms. A swipe crossing a tile boundary does not send an action.
 - **Honest offline state:** stale cached values are labelled as offline rather than presented as live; the controls are visually inactive when disconnected.
 - **Manual reconnect:** tap the top connection-status area to immediately retry if disconnected; normal capped automatic reconnect remains enabled.
@@ -49,7 +65,7 @@ See the [CSS theme guide](docs/css-theming.md) for supported selectors/propertie
 
 - Removed the "PF1007 · Android 6 · WebView non utilisé" footer from the canvas dashboard.
 - Added **on-demand web configuration**, running directly inside the Android app (no LXC, Docker, or WebView on the frame).
-- Web settings allow editing the Home Assistant URL, replacing the token if needed, and configuring all 3 sensor cards and 6 commands.
+- Web settings allow editing the Home Assistant URL, replacing the token if needed, and configuring pages, dynamic cards and grid columns.
 - Home Assistant entity picker searches by `friendly_name` or `entity_id`, including accented names, using authenticated `GET /api/states`. The long-lived token is never returned to the browser.
 - The web editor only starts manually from the frame's Settings page; it binds to the current `wlan0` IPv4 address, uses a displayed one-use six-digit PIN and a short-lived session, limits failed attempts, and **shuts down automatically after 15 minutes**. Port: `8765`.
 - Existing local configuration and encrypted token remain intact when upgrading with `adb install -r` (same package ID).

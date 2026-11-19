@@ -1,23 +1,44 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-let slots = [];
+let pages = [];
+let activePage = 0;
 let entities = [];
-let focusedSlot = -1;
+let focusedCard = -1;
 let tokenConfigured = false;
+const MAX_PAGES = 4;
+const MAX_CARDS = 12;
 const CSS_PRESETS = {
-  "original": "",
-  "ocean": ":root { --accent: #58d5e7; }\nbody { background-color: #071c2b; }\n.header, .clock { color: #b9f0ff; }\n.metric, .control, .settings { background-color: #113249; border-radius: 23px; }\n.control.on { background-color: #19575e; }\n.control.pressed { background-color: #296b77; }\n.accent { color: var(--accent); }",
-  "amber": ":root { --accent: #ffb25c; }\nbody { background-color: #1a1412; }\n.header, .clock { color: #ffe4b7; }\n.metric, .control, .settings { background-color: #2d231d; border-radius: 14px; }\n.control.on { background-color: #53391e; }\n.control.pressed { background-color: #704d2b; }\n.accent { color: var(--accent); }",
-  "light": ":root { --accent: #167b72; }\nbody { background-color: #ebf2f5; }\n.header, .clock, .control-label, .metric-value { color: #1c3445; }\n.subtitle, .date, .section, .metric-label, .control-state, .status { color: #506677; }\n.metric, .control, .settings { background-color: #ffffff; border-radius: 22px; }\n.settings { color: #20394c; }\n.control.on { background-color: #bcf1df; }\n.control.pressed { background-color: #9fe3d3; }\n.accent { color: var(--accent); }"
+  original: '',
+  ocean: `:root { --accent: #58d5e7; }
+body { background-color: #071c2b; }
+.header, .clock { color: #b9f0ff; }
+.metric, .control, .settings { background-color: #113249; border-radius: 23px; }
+.control.on { background-color: #19575e; }
+.control.pressed { background-color: #296b77; }
+.accent { color: var(--accent); }`,
+  amber: `:root { --accent: #ffb25c; }
+body { background-color: #1a1412; }
+.header, .clock { color: #ffe4b7; }
+.metric, .control, .settings { background-color: #2d231d; border-radius: 14px; }
+.control.on { background-color: #53391e; }
+.control.pressed { background-color: #704d2b; }
+.accent { color: var(--accent); }`,
+  light: `:root { --accent: #167b72; }
+body { background-color: #ebf2f5; }
+.header, .clock, .control-label, .metric-value { color: #1c3445; }
+.subtitle, .date, .section, .metric-label, .control-state, .status { color: #506677; }
+.metric, .control, .settings { background-color: #ffffff; border-radius: 22px; }
+.settings { color: #20394c; }
+.control.on { background-color: #bcf1df; }
+.control.pressed { background-color: #9fe3d3; }
+.accent { color: var(--accent); }`
 };
 const actionDomains = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover', 'scene', 'script', 'button', 'input_button']);
 
 async function request(path, options) {
   const response = await fetch(path, {
-    cache: 'no-store',
-    credentials: 'same-origin',
-    ...options,
+    cache: 'no-store', credentials: 'same-origin', ...options,
     headers: { ...(options && options.body ? { 'Content-Type': 'application/json' } : {}) }
   });
   let data;
@@ -26,15 +47,12 @@ async function request(path, options) {
   return data;
 }
 
-function showError(where, message) {
-  $(where).textContent = message;
-}
+function showError(where, message) { $(where).textContent = message; }
 
 function updateStatus() {
   request('/api/status').then((data) => {
     const m = Math.floor(data.remaining / 60);
-    const s = String(data.remaining % 60).padStart(2, '0');
-    $('timer').textContent = `${m}:${s}`;
+    $('timer').textContent = `${m}:${String(data.remaining % 60).padStart(2, '0')}`;
     if (data.remaining === 0) location.reload();
   }).catch(() => { $('timer').textContent = 'hors ligne'; });
 }
@@ -44,16 +62,37 @@ async function boot() {
   setInterval(updateStatus, 15000);
   try {
     const status = await request('/api/status');
-    if (!status.authenticated) {
-      $('login').classList.remove('hidden');
-      return;
-    }
+    if (!status.authenticated) { $('login').classList.remove('hidden'); return; }
     $('editor').classList.remove('hidden');
     await loadConfiguration();
     await loadEntities();
   } catch (e) {
     $('login').classList.remove('hidden');
     showError('loginError', e.message);
+  }
+}
+
+function moveItem(items, index, direction) {
+  const target = index + direction;
+  if (index < 0 || index >= items.length || target < 0 || target >= items.length) return false;
+  [items[index], items[target]] = [items[target], items[index]];
+  return true;
+}
+
+function makePage(title) { return { title, columns: 3, cards: [] }; }
+function makeCard(type) { return { type, label: '', entity_id: '' }; }
+
+function validatePages(items) {
+  if (!Array.isArray(items) || items.length < 1 || items.length > MAX_PAGES) throw new Error('1 à 4 pages requises');
+  for (const [i, page] of items.entries()) {
+    if (!page.title.trim() || page.title.trim().length > 32) throw new Error(`Titre invalide sur la page ${i + 1}`);
+    if (![2, 3, 4].includes(Number(page.columns))) throw new Error('Choisir 2, 3 ou 4 colonnes');
+    if (!Array.isArray(page.cards) || page.cards.length > Math.min(MAX_CARDS, Number(page.columns) * 3)) throw new Error('3 rangées maximum : augmente le nombre de colonnes ou retire des cartes');
+    for (const card of page.cards) {
+      if (!['metric', 'control'].includes(card.type)) throw new Error('Type de carte inconnu');
+      if (card.label.length > 48) throw new Error('Titre de carte trop long');
+      if (card.entity_id && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(card.entity_id)) throw new Error(`Entité invalide : ${card.entity_id}`);
+    }
   }
 }
 
@@ -66,76 +105,148 @@ async function loadConfiguration() {
   $('tokenStatus').textContent = tokenConfigured
     ? 'Token enregistré sur le cadre : il reste inchangé si ce champ est vide.'
     : 'Aucun token enregistré. Ajoute un token Home Assistant pour connecter le cadre.';
-  slots = data.slots.map((s) => ({ label: s.label || '', entity_id: s.entity_id || '' }));
-  renderSlots();
+  pages = data.pages || [makePage('Maison')];
+  activePage = 0;
+  renderPages();
 }
 
-function reorderSlots(items, index, direction) {
-  const start = index < 3 ? 0 : 3;
-  const end = index < 3 ? 3 : 9;
-  const target = index + direction;
-  if (index < start || index >= end || target < start || target >= end) return false;
-  [items[index], items[target]] = [items[target], items[index]];
-  return true;
+function changed() { $('message').textContent = 'Modifications non enregistrées — clique sur Enregistrer.'; }
+
+function renderPages() {
+  activePage = Math.max(0, Math.min(activePage, pages.length - 1));
+  const nav = $('pageTabs');
+  nav.replaceChildren();
+  pages.forEach((page, index) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = index === activePage ? 'pageButton selected' : 'pageButton';
+    btn.textContent = page.title || `Page ${index + 1}`;
+    btn.addEventListener('click', () => { activePage = index; renderPages(); });
+    nav.append(btn);
+  });
+  $('addPage').disabled = pages.length >= MAX_PAGES;
+  $('removePage').disabled = pages.length <= 1;
+  $('prevPage').disabled = activePage === 0;
+  $('nextPage').disabled = activePage === pages.length - 1;
+  const page = pages[activePage];
+  $('pageName').value = page.title;
+  $('pageColumns').value = String(page.columns);
+  const limit = Math.min(MAX_CARDS, page.columns * 3);
+  $('cardCount').textContent = `${page.cards.length}/${limit} cartes`;
+  $('addMetric').disabled = $('addControl').disabled = page.cards.length >= limit;
+  renderCards();
 }
 
-function moveSlot(index, direction) {
-  if (!reorderSlots(slots, index, direction)) return;
-  renderSlots();
-  $('message').textContent = 'Ordre modifié — enregistre pour appliquer au cadre.';
+function addPage() {
+  if (pages.length >= MAX_PAGES) return;
+  pages.push(makePage(`Page ${pages.length + 1}`));
+  activePage = pages.length - 1;
+  renderPages(); changed();
 }
 
-function renderSlots() {
-  for (const [containerId, start, end] of [['metrics', 0, 3], ['controls', 3, 9]]) {
-    const container = $(containerId);
-    container.replaceChildren();
-    for (let i = start; i < end; i++) {
-      const tile = document.createElement('article');
-      tile.className = 'tile';
-      const heading = document.createElement('h3');
-      heading.textContent = `${i < 3 ? 'Capteur' : 'Commande'} ${i < 3 ? i + 1 : i - 2}`;
-      const header = document.createElement('div');
-      header.className = 'tileHeader';
-      const reorder = document.createElement('div');
-      reorder.className = 'reorder';
-      for (const direction of [-1, 1]) {
-        const move = document.createElement('button');
-        move.type = 'button';
-        move.textContent = direction < 0 ? '↑' : '↓';
-        move.title = direction < 0 ? 'Déplacer à gauche / avant' : 'Déplacer à droite / après';
-        move.setAttribute('aria-label', move.title);
-        move.disabled = direction < 0 ? i === start : i === end - 1;
-        move.addEventListener('click', () => moveSlot(i, direction));
-        reorder.append(move);
-      }
-      header.append(heading, reorder);
-      const nameLabel = document.createElement('label');
-      nameLabel.textContent = 'Titre de la carte';
-      const label = document.createElement('input');
-      label.value = slots[i].label;
-      label.maxLength = 48;
-      label.placeholder = 'Nom affiché';
-      label.addEventListener('input', () => { slots[i].label = label.value; });
-      const entityLabel = document.createElement('label');
-      entityLabel.textContent = 'Entité Home Assistant';
-      const pick = document.createElement('div');
-      pick.className = 'pick';
-      const entity = document.createElement('input');
-      entity.value = slots[i].entity_id;
-      entity.placeholder = 'Recherche ou entity_id';
-      entity.spellcheck = false;
-      entity.addEventListener('input', () => { slots[i].entity_id = entity.value.trim(); });
-      const button = document.createElement('button');
-      button.textContent = 'Chercher';
-      button.type = 'button';
-      button.addEventListener('click', () => openPicker(i));
-      pick.append(entity, button);
-      const info = document.createElement('div');
-      info.className = 'hint';
-      info.textContent = i < 3 ? 'Valeur et unité actualisées en direct' : 'Action au toucher, selon le type d’entité';
-      tile.append(header, nameLabel, label, entityLabel, pick, info);
-      container.append(tile);
+function removePage() {
+  if (pages.length <= 1) return;
+  if (!confirm(`Supprimer la page « ${pages[activePage].title} » et ses cartes ?`)) return;
+  pages.splice(activePage, 1);
+  activePage = Math.min(activePage, pages.length - 1);
+  renderPages(); changed();
+}
+
+function movePage(direction) {
+  if (!moveItem(pages, activePage, direction)) return;
+  activePage += direction;
+  renderPages(); changed();
+}
+
+function addCard(type) {
+  if (pages[activePage].cards.length >= Math.min(MAX_CARDS, pages[activePage].columns * 3)) return;
+  pages[activePage].cards.push(makeCard(type));
+  renderPages(); changed();
+}
+
+function editCardType(index, type) {
+  const card = pages[activePage].cards[index];
+  card.type = type;
+  if (type === 'control' && card.entity_id && !actionDomains.has(card.entity_id.split('.')[0])) {
+    card.entity_id = '';
+  }
+  renderCards(); changed();
+}
+
+function moveCard(index, direction) {
+  if (!moveItem(pages[activePage].cards, index, direction)) return;
+  renderCards(); changed();
+}
+
+function removeCard(index) {
+  pages[activePage].cards.splice(index, 1);
+  renderPages(); changed();
+}
+
+function renderCards() {
+  const cards = pages[activePage].cards;
+  const grid = $('cards');
+  grid.replaceChildren();
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const tile = document.createElement('article');
+    tile.className = 'tile';
+    const heading = document.createElement('h3');
+    heading.textContent = `Carte ${i + 1}`;
+    const header = document.createElement('div');
+    header.className = 'tileHeader';
+    const buttons = document.createElement('div');
+    buttons.className = 'reorder';
+    for (const dir of [-1, 1]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = dir < 0 ? '↑' : '↓';
+      b.title = dir < 0 ? 'Déplacer avant' : 'Déplacer après';
+      b.disabled = dir < 0 ? i === 0 : i === cards.length - 1;
+      b.addEventListener('click', () => moveCard(i, dir));
+      buttons.append(b);
     }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '✕';
+    remove.title = 'Supprimer la carte';
+    remove.addEventListener('click', () => removeCard(i));
+    buttons.append(remove);
+    header.append(heading, buttons);
+    const typeLabel = document.createElement('label');
+    typeLabel.textContent = 'Type';
+    const type = document.createElement('select');
+    for (const [value, label] of [['metric', 'Capteur'], ['control', 'Commande']]) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      type.append(option);
+    }
+    type.value = card.type;
+    type.addEventListener('change', () => editCardType(i, type.value));
+    const titleLabel = document.createElement('label');
+    titleLabel.textContent = 'Titre de la carte';
+    const title = document.createElement('input');
+    title.value = card.label;
+    title.maxLength = 48;
+    title.placeholder = 'Nom affiché';
+    title.addEventListener('input', () => { card.label = title.value; changed(); });
+    const entityLabel = document.createElement('label');
+    entityLabel.textContent = 'Entité Home Assistant';
+    const pick = document.createElement('div');
+    pick.className = 'pick';
+    const entity = document.createElement('input');
+    entity.value = card.entity_id;
+    entity.placeholder = 'Recherche ou entity_id';
+    entity.spellcheck = false;
+    entity.addEventListener('input', () => { card.entity_id = entity.value.trim(); changed(); });
+    const picker = document.createElement('button');
+    picker.textContent = 'Chercher';
+    picker.type = 'button';
+    picker.addEventListener('click', () => openPicker(i));
+    pick.append(entity, picker);
+    tile.append(header, typeLabel, type, titleLabel, title, entityLabel, pick);
+    grid.append(tile);
   }
 }
 
@@ -149,16 +260,14 @@ async function loadEntities() {
     if ($('picker').open) renderResults();
   } catch (e) {
     $('entityCount').textContent = 'Recherche indisponible';
-    $('message').textContent = `Entités : ${e.message}. Vérifier URL et token Home Assistant.`;
+    $('message').textContent = `Entités : ${e.message}. Vérifie l’URL et le token.`;
   }
 }
 
-function normalize(s) {
-  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-}
+function normalize(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
 
 function openPicker(index) {
-  focusedSlot = index;
+  focusedCard = index;
   $('search').value = '';
   $('picker').showModal();
   renderResults();
@@ -167,39 +276,39 @@ function openPicker(index) {
 
 function renderResults() {
   const term = normalize($('search').value);
-  const actionsOnly = focusedSlot >= 3;
+  const card = pages[activePage].cards[focusedCard];
+  if (!card) return;
   let matches = entities.filter((e) => {
-    if (actionsOnly && !actionDomains.has(e.entity_id.split('.')[0])) return false;
+    if (card.type === 'control' && !actionDomains.has(e.entity_id.split('.')[0])) return false;
     return normalize(e.entity_id).includes(term) || normalize(e.name).includes(term);
   });
   const count = matches.length;
   matches = matches.slice(0, 75);
-  $('pickerInfo').textContent = `${count} résultat(s)${count > 75 ? ' — 75 premiers affichés, affine la recherche' : ''}`;
+  $('pickerInfo').textContent = `${count} résultat(s)${count > 75 ? ' — affine la recherche' : ''}`;
   const results = $('results');
   results.replaceChildren();
-  if (count === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'muted';
-    empty.textContent = 'Aucune entité trouvée. Tu peux aussi saisir un entity_id manuellement.';
-    empty.style.padding = '12px';
-    results.append(empty);
+  if (!matches.length) {
+    const text = document.createElement('p');
+    text.textContent = 'Aucune entité trouvée. Tu peux aussi saisir un entity_id manuellement.';
+    text.className = 'muted';
+    results.append(text);
   }
   matches.forEach((e) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'result';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'result';
     const name = document.createElement('strong');
     name.textContent = e.name || e.entity_id;
     const id = document.createElement('small');
     id.textContent = e.entity_id;
-    button.append(name, id);
-    button.addEventListener('click', () => {
-      slots[focusedSlot].entity_id = e.entity_id;
-      if (!slots[focusedSlot].label.trim()) slots[focusedSlot].label = e.name || e.entity_id;
+    btn.append(name, id);
+    btn.addEventListener('click', () => {
+      card.entity_id = e.entity_id;
+      if (!card.label.trim()) card.label = e.name || e.entity_id;
       $('picker').close();
-      renderSlots();
+      renderCards(); changed();
     });
-    results.append(button);
+    results.append(btn);
   });
 }
 
@@ -212,10 +321,16 @@ async function saveConfiguration() {
       token: $('token').value.trim(),
       dashboard_title: $('dashboardTitle').value.trim() || 'HA FRAME',
       custom_css: $('customCss').value,
-      slots: slots.map((s) => ({ label: s.label.trim(), entity_id: s.entity_id.trim() }))
+      pages: pages.map((page) => ({
+        title: page.title.trim(), columns: Number(page.columns),
+        cards: page.cards.map((card) => ({
+          type: card.type, label: card.label.trim(), entity_id: card.entity_id.trim()
+        }))
+      }))
     };
     if (!payload.url) throw new Error('Adresse Home Assistant manquante');
     if (!tokenConfigured && !payload.token) throw new Error('Token Home Assistant manquant');
+    validatePages(payload.pages);
     await request('/api/config', { method: 'POST', body: JSON.stringify(payload) });
     $('token').value = '';
     tokenConfigured = true;
@@ -239,6 +354,29 @@ $('loginForm').addEventListener('submit', async (event) => {
     await loadConfiguration();
     await loadEntities();
   } catch (e) { showError('loginError', e.message); }
+});
+$('addPage').addEventListener('click', addPage);
+$('removePage').addEventListener('click', removePage);
+$('prevPage').addEventListener('click', () => movePage(-1));
+$('nextPage').addEventListener('click', () => movePage(1));
+$('addMetric').addEventListener('click', () => addCard('metric'));
+$('addControl').addEventListener('click', () => addCard('control'));
+$('pageName').addEventListener('input', () => {
+  pages[activePage].title = $('pageName').value;
+  const nav = $('pageTabs').children[activePage];
+  if (nav) nav.textContent = $('pageName').value || `Page ${activePage + 1}`;
+  changed();
+});
+$('pageColumns').addEventListener('change', () => {
+  const page = pages[activePage];
+  const columns = Number($('pageColumns').value);
+  if (page.cards.length > columns * 3) {
+    $('message').textContent = `Impossible : ${page.cards.length} cartes nécessitent au moins ${Math.ceil(page.cards.length / 3)} colonnes.`;
+    $('pageColumns').value = String(page.columns);
+    return;
+  }
+  page.columns = columns;
+  renderPages(); changed();
 });
 $('search').addEventListener('input', renderResults);
 $('customCss').addEventListener('input', () => {
@@ -274,9 +412,10 @@ $('cssFile').addEventListener('change', async () => {
 });
 $('closePicker').addEventListener('click', () => $('picker').close());
 $('clearEntity').addEventListener('click', () => {
-  if (focusedSlot >= 0) slots[focusedSlot].entity_id = '';
+  const card = pages[activePage].cards[focusedCard];
+  if (card) { card.entity_id = ''; changed(); }
   $('picker').close();
-  renderSlots();
+  renderCards();
 });
 $('reloadEntities').addEventListener('click', loadEntities);
 $('save').addEventListener('click', saveConfiguration);
