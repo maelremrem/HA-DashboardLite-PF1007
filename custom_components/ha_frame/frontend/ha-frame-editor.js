@@ -65,6 +65,12 @@ const THEME_LABELS = {
   original:"Original", ocean:"Océan", amber:"Ambre", light:"Clair",
   ...Object.fromEntries(Object.entries(PALETTE_THEMES).map(([id,p])=>[id,p.label]))
 };
+const THEME_SWATCHES = {
+  original:{bg:"#10151e",card:"#1b2432",text:"#f5f7fb",accent:"#67dbba"},
+  ocean:{bg:"#071c2b",card:"#113249",text:"#b9f0ff",accent:"#58d5e7"},
+  amber:{bg:"#1a1412",card:"#2d231d",text:"#ffe4b7",accent:"#ffb25c"},
+  light:{bg:"#ebf2f5",card:"#ffffff",text:"#1c3445",accent:"#167b72"}
+};
 const SHAPES = {
   standard: {label:"Standard", radius:20},
   square: {label:"Anguleux", radius:4},
@@ -346,7 +352,7 @@ class HaFrameVisualEditor extends HTMLElement {
       this._frameOptions() + "</select><button data-action='reload' title='Relire la configuration du cadre'>↻ Actualiser</button></div></div>" +
       "<div class='row toolbar'>" +
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
-      "<button data-action='page-panel'>Page</button>" +
+      "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
       "<span class='spacer'></span><label>" + esc(page.cards.length) + "/" + esc(page.columns*3) + " tuiles</label></div></div>" +
       "<div class='content'><div class='canvas-area'>" +
@@ -398,14 +404,18 @@ class HaFrameVisualEditor extends HTMLElement {
       } else if (tile.type === "control") {
         value = isOn ? "Activé" : raw === "off" ? "Désactivé" : raw;
       }
-      const cls = tile.type === "metric" || tile.type === "gauge" ? ".metric" : ".control";
-      const css = combine(rules, cls, cls + "-" + (i+1), isOn ? ".control.on" : "");
+      const slot = tile.type === "metric"
+        ? ".metric-" + page.cards.slice(0,i+1).filter(t=>t.type==="metric").length
+        : ".control-" + page.cards.slice(0,i+1).filter(t=>t.type!=="metric").length;
+      const css = combine(rules, ".card", "." + tile.type, slot, isOn ? ".control.on" : "");
+      const labelCss = combine(rules, ".metric-label");
+      const valueCss = combine(rules, ".metric-value");
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%'></i></div>";
       return "<div class='screen-tile" + (this._tile===i?" selected":"") + "' data-tile='" + i +
         "' role='button' tabindex='0' draggable='true' style='" + css + "'>" +
-        "<div class='tile-label'>" + esc(tile.label || tile.type) + "</div>" +
-        "<div class='tile-value'>" + esc(value) + "</div>" + bar +
+        "<div class='tile-label' style='" + labelCss + "'>" + esc(tile.label || tile.type) + "</div>" +
+        "<div class='tile-value' style='" + valueCss + "'>" + esc(value) + "</div>" + bar +
         "<div class='tile-hint'>" + esc(hint) + "</div></div>";
     }).join("");
     const date = new Intl.DateTimeFormat("fr-FR", {weekday:"long",day:"numeric",month:"long"}).format(new Date());
