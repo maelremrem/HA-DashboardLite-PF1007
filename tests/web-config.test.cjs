@@ -8,7 +8,8 @@ const start = source.indexOf('function moveItem(');
 const end = source.indexOf('\nasync function loadConfiguration(', start);
 assert.ok(start >= 0 && end > start);
 const sandbox = vm.createContext({});
-vm.runInContext('const MAX_PAGES = 4; const MAX_CARDS = 12; ' + source.slice(start, end), sandbox);
+const defs = source.slice(source.indexOf('const CARD_TYPES = '), source.indexOf('let displaySettings = '));
+vm.runInContext('const MAX_PAGES = 4; const MAX_CARDS = 12; ' + defs + source.slice(start, end), sandbox);
 
 const exec = (statement) => vm.runInContext(statement, sandbox);
 exec('var pages = [makePage("Maison")];');
@@ -37,4 +38,14 @@ exec('pages[0].cards[0].type = "control";');
 assert.doesNotThrow(() => exec('validatePages(pages)'));
 exec('pages = Array.from({length: 5}, (_, i) => makePage("Page " + i));');
 assert.throws(() => exec('validatePages(pages)'), /pages/);
+exec('pages = [makePage("Caméras")]; pages[0].cards.push({...makeCard("camera"),entity_id:"camera.front",icon:"camera",col_span:2,row_span:2});');
+assert.doesNotThrow(() => exec('validatePages(pages)'));
+exec('pages[0].cards[0].entity_id = "sensor.foo"');
+assert.throws(() => exec('validatePages(pages)'), /camera/);
+exec('pages[0].cards[0].entity_id = "camera.front"');
+exec('pages[0].cards[0].icon = "unsafe"');
+assert.throws(() => exec('validatePages(pages)'), /Icône/);
+exec('pages[0].cards[0].icon = "camera"');
+assert.doesNotThrow(() => exec('validatePages(pages)'));
+
 console.log('Dynamic pages, cards and limits passed');

@@ -39,7 +39,7 @@ class DeviceDiagnosticsContractTests(unittest.TestCase):
         gradle = (ROOT / "app/build.gradle").read_text()
         integration = (ROOT / "custom_components/ha_frame/manifest.json").read_text()
         self.assertIn("android.permission.ACCESS_WIFI_STATE", manifest)
-        self.assertIn("versionName '0.9.0'", gradle)
+        self.assertIn("versionName '1.0.0'", gradle)
         self.assertGreaterEqual(tuple(map(int, __import__("json").loads(integration)["version"].split("."))), (0, 9, 0))
         self.assertIn("EntityCategory.DIAGNOSTIC",
                       (ROOT / "custom_components/ha_frame/sensor.py").read_text())

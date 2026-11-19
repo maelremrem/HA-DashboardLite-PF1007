@@ -64,7 +64,31 @@ for (const [id,p] of Object.entries(PALETTE_THEMES)) CSS_PRESETS[id] = paletteCs
 const actionDomains = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover', 'scene', 'script', 'button', 'input_button']);
 
 const CARD_TYPES = [['metric', 'Capteur'], ['control', 'Commande'], ['gauge', 'Jauge'],
-  ['thermostat', 'Thermostat'], ['light', 'Lumière / variateur'], ['cover', 'Volet / position']];
+  ['thermostat', 'Thermostat'], ['light', 'Lumière / variateur'], ['cover', 'Volet / position'],
+  ['weather', 'Météo'], ['graph', 'Courbe'], ['camera', 'Caméra MJPEG']];
+const ICONS = ['', 'none', 'home', 'light', 'thermometer', 'energy', 'water', 'sun',
+  'cloud', 'lock', 'camera', 'chart', 'fan', 'battery', 'wifi', 'person', 'settings',
+  'bell', 'door', 'plug', 'moon', 'heart'];
+function checkGrid(page) {
+  const cols = Number(page.columns);
+  const occupied = Array.from({length:3}, () => Array(cols).fill(false));
+  for (const card of page.cards) {
+    const width=card.col_span ?? 1, height=card.row_span ?? 1;
+    if (!Number.isInteger(width) || !Number.isInteger(height) ||
+        width<1 || height<1 || width>cols || height>2) throw new Error("Taille de tuile invalide");
+    let placed=false;
+    for (let row=0; row+height<=3 && !placed; row++) {
+      for (let col=0; col+width<=cols; col++) {
+        let free=true;
+        for (let r=row; r<row+height; r++) for(let c=col; c<col+width; c++) if (occupied[r][c]) free=false;
+        if(!free)continue;
+        for (let r=row; r<row+height; r++) for(let c=col; c<col+width; c++) occupied[r][c]=true;
+        placed=true;break;
+      }
+    }
+    if(!placed)throw new Error("Grille de 3 rangées dépassée : réduire les tailles de tuile");
+  }
+}
 let displaySettings = {};
 
 async function request(path, options) {
@@ -120,11 +144,16 @@ function validatePages(items) {
     if (![2, 3, 4].includes(Number(page.columns))) throw new Error('Choisir 2, 3 ou 4 colonnes');
     if (!Array.isArray(page.cards) || page.cards.length > Math.min(MAX_CARDS, Number(page.columns) * 3)) throw new Error('3 rangées maximum : augmente le nombre de colonnes ou retire des cartes');
     for (const card of page.cards) {
-      if (!['metric', 'control', 'gauge', 'thermostat', 'light', 'cover'].includes(card.type)) throw new Error('Type de carte inconnu');
+      if (!CARD_TYPES.some(([type])=>type===card.type)) throw new Error('Type de carte inconnu');
       if (!Number.isFinite(Number(card.min ?? 0)) || !Number.isFinite(Number(card.max ?? 100)) || Number(card.max ?? 100) <= Number(card.min ?? 0)) throw new Error('Plage de jauge invalide');
       if (card.label.length > 48) throw new Error('Titre de carte trop long');
       if (card.entity_id && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(card.entity_id)) throw new Error(`Entité invalide : ${card.entity_id}`);
+      if (card.icon && !ICONS.includes(card.icon)) throw new Error('Icône invalide');
+      if (card.type === 'camera' && card.entity_id && !card.entity_id.startsWith('camera.')) throw new Error('Utilise une entité camera.*');
+      if (card.type === 'weather' && card.entity_id && !card.entity_id.startsWith('weather.')) throw new Error('Utilise une entité weather.*');
     }
+    if (page.cards.filter(card => card.type === "camera").length > 1) throw new Error("Une seule caméra par page");
+    checkGrid(page);
   }
 }
 
@@ -292,6 +321,36 @@ function renderCards() {
     picker.addEventListener('click', () => openPicker(i));
     pick.append(entity, picker);
     tile.append(header, typeLabel, type, titleLabel, title, entityLabel, pick);
+    const advanced = document.createElement('div');
+    advanced.className = 'fields';
+    const iconLabel=document.createElement('label');
+    iconLabel.textContent='Icône';
+    const icon=document.createElement('select');
+    for (const name of ICONS) {
+      const item=document.createElement('option');
+      item.value=name;
+      item.textContent=name || 'Automatique';
+      icon.append(item);
+    }
+    icon.value=card.icon || '';
+    icon.addEventListener('change',()=>{ card.icon=icon.value;changed(); });
+    iconLabel.append(icon);
+    advanced.append(iconLabel);
+    for (const [key,text,max] of [['col_span','Largeur (colonnes)',Number(pages[activePage].columns)],
+                                  ['row_span','Hauteur (rangées)',2]]) {
+      const label=document.createElement('label');
+      label.textContent=text;
+      const select=document.createElement('select');
+      for(let value=1;value<=max;value++){
+        const option=document.createElement('option');
+        option.value=String(value);option.textContent=String(value);
+        select.append(option);
+      }
+      select.value=String(card[key] || 1);
+      select.addEventListener('change',()=>{card[key]=Number(select.value);changed();});
+      label.append(select);advanced.append(label);
+    }
+    tile.append(advanced);
     if (card.type === 'gauge') {
       const range = document.createElement('div');
       range.className = 'fields';
@@ -342,6 +401,8 @@ function renderResults() {
     if (card.type === 'thermostat' && !e.entity_id.startsWith('climate.')) return false;
     if (card.type === 'light' && !e.entity_id.startsWith('light.')) return false;
     if (card.type === 'cover' && !e.entity_id.startsWith('cover.')) return false;
+    if (card.type === 'weather' && !e.entity_id.startsWith('weather.')) return false;
+    if (card.type === 'camera' && !e.entity_id.startsWith('camera.')) return false;
     return normalize(e.entity_id).includes(term) || normalize(e.name).includes(term);
   });
   const count = matches.length;
@@ -395,7 +456,11 @@ async function saveConfiguration() {
       pages: pages.map((page) => ({
         title: page.title.trim(), columns: Number(page.columns),
         cards: page.cards.map((card) => ({
-          type: card.type, label: card.label.trim(), entity_id: card.entity_id.trim(), min: card.min ?? 0, max: card.max ?? 100
+          type: card.type, label: card.label.trim(), entity_id: card.entity_id.trim(), min: card.min ?? 0, max: card.max ?? 100,
+          ...(card.icon ? {icon:card.icon} : {}),
+          ...(card.col_span ? {col_span:card.col_span} : {}),
+          ...(card.row_span ? {row_span:card.row_span} : {}),
+          ...(card.style ? {style:card.style} : {})
         }))
       }))
     };

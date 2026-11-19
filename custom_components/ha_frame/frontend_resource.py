@@ -12,7 +12,7 @@ _LOGGER = logging.getLogger(__name__)
 RESOURCE_PATH = "/ha-frame/ha-frame-editor.js"
 PANEL_RESOURCE_PATH = "/ha-frame/ha-frame-studio-panel.js"
 PANEL_URL_PATH = "ha-frame-studio"
-RESOURCE_VERSION = "1.2.0"
+RESOURCE_VERSION = "1.3.0"
 
 
 async def async_register_editor_frontend(hass) -> None:

@@ -23,6 +23,13 @@ final class FrameConfig {
         String entityId;
         float min = 0;
         float max = 100;
+        int colSpan = 1;
+        int rowSpan = 1;
+        String background = "";
+        String foreground = "";
+        String accent = "";
+        String icon = "";
+        int radius = -1;
 
         Card(String type, String label, String entityId) {
             this.type = type;
@@ -31,8 +38,18 @@ final class FrameConfig {
         }
 
         JSONObject toJson() throws Exception {
-            return new JSONObject().put("type", type).put("label", label).put("entity_id", entityId)
+            JSONObject item = new JSONObject().put("type", type).put("label", label).put("entity_id", entityId)
                 .put("min", min).put("max", max);
+            if (colSpan != 1) item.put("col_span", colSpan);
+            if (rowSpan != 1) item.put("row_span", rowSpan);
+            JSONObject style = new JSONObject();
+            if (!background.isEmpty()) style.put("background", background);
+            if (!foreground.isEmpty()) style.put("foreground", foreground);
+            if (!accent.isEmpty()) style.put("accent", accent);
+            if (radius >= 0) style.put("radius", radius);
+            if (style.length() > 0) item.put("style", style);
+            if (!icon.isEmpty()) item.put("icon", icon);
+            return item;
         }
     }
 
@@ -44,6 +61,22 @@ final class FrameConfig {
         Page(String title, int columns) {
             this.title = title;
             this.columns = columns;
+        }
+
+        int[] columnSpans() {
+            int[] result = new int[cards.size()];
+            for (int i = 0; i < cards.size(); i++) result[i] = cards.get(i).colSpan;
+            return result;
+        }
+
+        int[] rowSpans() {
+            int[] result = new int[cards.size()];
+            for (int i = 0; i < cards.size(); i++) result[i] = cards.get(i).rowSpan;
+            return result;
+        }
+
+        TileGrid.Layout layout() {
+            return TileGrid.place(columns, columnSpans(), rowSpans());
         }
 
         JSONObject toJson() throws Exception {
@@ -84,6 +117,15 @@ final class FrameConfig {
         return config;
     }
 
+    private static String styleColor(JSONObject style, String key) throws Exception {
+        if (style == null || !style.has(key)) return "";
+        String value = style.getString(key);
+        if (!value.matches("#[0-9a-fA-F]{6}")) {
+            throw new IllegalArgumentException("Invalid tile style color: " + key);
+        }
+        return value;
+    }
+
     void setPages(JSONArray raw) throws Exception {
         if (raw.length() < 1 || raw.length() > MAX_PAGES) {
             throw new IllegalArgumentException("Nombre de pages invalide (1 à 4)");
@@ -107,7 +149,8 @@ final class FrameConfig {
                 String label = item.getString("label").trim();
                 String entity = item.getString("entity_id").trim();
                 if ((!"metric".equals(type) && !"control".equals(type) && !"gauge".equals(type) &&
-                     !"thermostat".equals(type) && !"light".equals(type) && !"cover".equals(type)) ||
+                     !"thermostat".equals(type) && !"light".equals(type) && !"cover".equals(type) &&
+                     !"weather".equals(type) && !"graph".equals(type) && !"camera".equals(type)) ||
                     label.length() > 48 ||
                     (!entity.isEmpty() && !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))) {
                     throw new IllegalArgumentException("Carte invalide : " + (k + 1));
@@ -118,8 +161,37 @@ final class FrameConfig {
                 if ((Float.isNaN(card.min) || Float.isInfinite(card.min)) ||
                     (Float.isNaN(card.max) || Float.isInfinite(card.max)) || card.max <= card.min ||
                     card.max - card.min > 1000000f) throw new IllegalArgumentException("Invalid gauge range");
+                card.icon = item.optString("icon", "");
+                if (!TileIcon.supported(card.icon)) {
+                    throw new IllegalArgumentException("Invalid tile icon");
+                }
+                if ("camera".equals(type) && !entity.isEmpty() && !entity.startsWith("camera.")) {
+                    throw new IllegalArgumentException("Camera cards require a camera entity");
+                }
+                card.colSpan = item.optInt("col_span", 1);
+                card.rowSpan = item.optInt("row_span", 1);
+                if (card.colSpan < 1 || card.colSpan > columns || card.rowSpan < 1 || card.rowSpan > 2) {
+                    throw new IllegalArgumentException("Invalid tile size");
+                }
+                JSONObject style = item.optJSONObject("style");
+                if (item.has("style") && style == null) {
+                    throw new IllegalArgumentException("Invalid tile style");
+                }
+                card.background = styleColor(style, "background");
+                card.foreground = styleColor(style, "foreground");
+                card.accent = styleColor(style, "accent");
+                if (style != null && style.has("radius")) {
+                    card.radius = style.getInt("radius");
+                    if (card.radius < 0 || card.radius > 72) {
+                        throw new IllegalArgumentException("Invalid tile corner radius");
+                    }
+                }
                 page.cards.add(card);
             }
+            int cameraCount = 0;
+            for (Card card : page.cards) if ("camera".equals(card.type)) cameraCount++;
+            if (cameraCount > 1) throw new IllegalArgumentException("One camera per page maximum");
+            TileGrid.place(columns, page.columnSpans(), page.rowSpans());
             parsed.add(page);
         }
         pages.clear();

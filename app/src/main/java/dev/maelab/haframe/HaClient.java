@@ -1,10 +1,12 @@
 package dev.maelab.haframe;
 
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.Map;
+import java.util.ArrayDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,6 +46,8 @@ final class HaClient {
     private final AtomicInteger sequence = new AtomicInteger(1);
     private final AtomicBoolean redrawPending = new AtomicBoolean(false);
     private final Map<String, EntityState> states = new ConcurrentHashMap<>();
+    private final Map<String, ArrayDeque<Float>> trends = new ConcurrentHashMap<>();
+    private final CameraFeed cameraFeed;
     private final Listener listener;
     private final String endpoint;
     private final String token;
@@ -92,10 +96,46 @@ final class HaClient {
         this.token = token;
         this.entities = entities;
         this.listener = listener;
+        this.cameraFeed = new CameraFeed(client, endpoint, token, this::changed);
     }
 
     EntityState get(String id) {
         return states.get(id);
+    }
+
+    private void putState(String id, String value, JSONObject attrs) {
+        states.put(id, new EntityState(value, attrs));
+        try {
+            float n = Float.parseFloat(value);
+            if (Float.isNaN(n) || Float.isInfinite(n)) return;
+            ArrayDeque<Float> values = trends.computeIfAbsent(id, key -> new ArrayDeque<>());
+            synchronized (values) {
+                if (!values.isEmpty() && Float.compare(values.getLast(), n) == 0) return;
+                values.addLast(n);
+                while (values.size() > 24) values.removeFirst();
+            }
+        } catch (NumberFormatException ignored) {
+            // Only numeric entities maintain a trend.
+        }
+    }
+
+    float[] recentSamples(String id) {
+        ArrayDeque<Float> values = trends.get(id);
+        if (values == null) return new float[0];
+        synchronized (values) {
+            float[] result = new float[values.size()];
+            int i = 0;
+            for (Float number : values) result[i++] = number;
+            return result;
+        }
+    }
+
+    void selectCamera(String entityId) {
+        cameraFeed.select(entityId);
+    }
+
+    Bitmap cameraFrame(String entityId) {
+        return cameraFeed.frame(entityId);
     }
 
     boolean isConnected() {
@@ -109,6 +149,7 @@ final class HaClient {
     }
 
     void stop() {
+        cameraFeed.stop();
         stopped = true;
         authenticated = false;
         main.removeCallbacks(reconnect);
@@ -256,7 +297,7 @@ final class HaClient {
                 if (item == null) continue;
                 String entity = item.optString("entity_id", "");
                 if (!wanted(entity)) continue;
-                states.put(entity, new EntityState(item.optString("state", ""), item.optJSONObject("attributes")));
+                putState(entity, item.optString("state", ""), item.optJSONObject("attributes"));
             }
             receivedStateSnapshot = true;
             main.removeCallbacks(snapshotFallback);
@@ -281,7 +322,7 @@ final class HaClient {
         if (!wanted(id)) return;
         JSONObject current = data.optJSONObject("new_state");
         if (current == null) states.remove(id);
-        else states.put(id, new EntityState(current.optString("state", ""), current.optJSONObject("attributes")));
+        else putState(id, current.optString("state", ""), current.optJSONObject("attributes"));
         changed();
     }
 
@@ -295,7 +336,7 @@ final class HaClient {
                 if (!wanted(id)) continue;
                 JSONObject value = added.optJSONObject(id);
                 if (value == null) continue;
-                states.put(id, new EntityState(value.optString("s", ""), value.optJSONObject("a")));
+                putState(id, value.optString("s", ""), value.optJSONObject("a"));
                 modified = true;
             }
         }
@@ -336,7 +377,7 @@ final class HaClient {
                         attrs.remove(removedAttrs.optString(k));
                     }
                 }
-                states.put(id, new EntityState(state, attrs));
+                putState(id, state, attrs);
                 modified = true;
             }
         }

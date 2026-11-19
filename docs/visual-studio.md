@@ -1,4 +1,4 @@
-# HA Frame Studio — Home Assistant sidebar editor (integration v1.2.0)
+# HA Frame Studio — Home Assistant sidebar editor (integration v1.3.0)
 
 The Home Assistant integration now installs a dedicated **HA Frame Studio** sidebar panel. You can configure all paired PF1007 frames directly from Home Assistant, without manually adding a Lovelace card or JavaScript resource.
 
@@ -6,7 +6,7 @@ The editor is a standalone full-page panel at **/ha-frame-studio**, with the sam
 
 ## Setup
 
-1. Update the **HA Frame PF1007** integration to **v1.2.0** through HACS/Marketplace (or replace `custom_components/ha_frame` manually).
+1. Update the **HA Frame PF1007** integration to **v1.3.0** through HACS/Marketplace (or replace `custom_components/ha_frame` manually).
 2. Restart Home Assistant, then hard-refresh the browser if the panel is not immediately visible.
 3. Open **HA Frame Studio** from the left sidebar. Alternatively, visit `https://YOUR_HA_HOST/ha-frame-studio`.
 4. Select a frame using the dropdown at the top. The panel lists all paired frames.
@@ -41,6 +41,19 @@ Click **Dispositions** to add a prefilled page or replace the current page. Repl
 
 The new presets in Studio and the Home Assistant options wizard work with the existing Android v0.9.0 renderer. New presets in the *on-device web configuration dropdown* require rebuilding/installing an APK with the updated web assets; this is not required for Studio.
 
+## Advanced widgets, icons and video (Android APK 1.0.0 required)
+
+Studio fixes the scaling of the 1280 × 800 preview, so CSS font sizes and tile spacing are proportional to the frame's Canvas renderer. Select a tile to change its **icon** (20 built-in native vectors or automatic), individual **background/text/accent colors**, **corner radius**, and its **width (1–4 columns)** and **height (1–2 rows)**. A deterministic first-fit layout algorithm blocks overlaps and keeps everything inside 3 rows. Wider and taller cards resize their touch areas on Android. Studio offers new Camera and Trend/Weather page templates.
+
+- **Weather:** choose an entity `weather.example`. The tile shows condition, temperature and humidity when supplied.
+- **Graph:** choose a numeric `sensor.example`. The app holds the last 24 *distinct value changes* in memory (not historical hours/days); history resets when the app reconnects.
+- **Camera:** choose `camera.example` from Home Assistant. The frame requests `/api/camera_proxy_stream/camera.example?interval=1.0` with its existing Home Assistant token, with authenticated JPEG snapshot fallback. The stream displays roughly one frame per second, with **no audio**. A single camera stream is active at a time, and it is paused while the screen sleeps or a different page is selected. Camera availability and latency depend on the integration and hardware.
+- Direct RTSP, HLS, WebRTC, arbitrary URLs, and multiple simultaneous video streams are **not supported** in this release. Add your network camera to Home Assistant first to use `camera.*`.
+
+**Install both parts:** flash/install Android APK **v1.0.0** first (preserves pairing and settings via `adb install -r`), then update **HA Frame PF1007 v1.3.0** through HACS and restart HA. Older APKs remain supported for legacy tiles but cannot display advanced tiles.
+
+The Studio browser preview of camera cards intentionally displays a camera placeholder; the MJPEG frames appear on the Android frame itself. Graph preview values only cover state updates while Studio is open. Test a camera with low resolution first.
+
 ## Optional legacy Lovelace card
 
 The original dashboard card remains available for existing dashboards:
@@ -70,7 +83,7 @@ entry_id: REPLACE_WITH_HA_FRAME_CONFIG_ENTRY_ID
 
 ## Troubleshooting
 
-- **Sidebar missing:** confirm integration v1.2.0 is installed and Home Assistant restarted. Open `/ha-frame-studio` directly. Check the user is an administrator.
+- **Sidebar missing:** confirm integration v1.3.0 is installed and Home Assistant restarted. Open `/ha-frame-studio` directly. Check the user is an administrator.
 - **Blank panel:** check `/ha-frame/ha-frame-studio-panel.js?v=1.1.0` and `/ha-frame/ha-frame-editor.js?v=1.1.0` are served by Home Assistant. Inspect browser console errors.
 - **Legacy card not found:** verify its module resource under Settings → Dashboards → Resources. This does not affect the sidebar.
 - **Frame offline:** confirm Wi-Fi and TCP port 8766. The editor accesses frames via Home Assistant's backend.
