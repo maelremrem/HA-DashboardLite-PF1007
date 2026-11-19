@@ -16,5 +16,154 @@
     "abort": {
       "already_configured": "This frame is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dashboard configuration",
+        "description": "Changes are applied directly to the frame over the LAN. Finish when done.",
+        "menu_options": {
+          "appearance": "Title and themes",
+          "css": "Custom CSS",
+          "pages": "Manage pages",
+          "tiles_page": "Organize tiles",
+          "done": "Finish"
+        }
+      },
+      "appearance": {
+        "title": "Appearance",
+        "description": "Keep CSS to preserve existing custom styling. Choosing another preset replaces the entire custom stylesheet.",
+        "data": {
+          "dashboard_title": "Dashboard title",
+          "theme": "Theme preset"
+        }
+      },
+      "css": {
+        "title": "Custom Canvas CSS",
+        "description": "Only the supported native Canvas CSS subset is accepted. Paste CSS here (12,000 characters maximum); leave blank to reset it.",
+        "data": {
+          "custom_css": "CSS"
+        }
+      },
+      "pages": {
+        "title": "Pages",
+        "menu_options": {
+          "page_add": "Add a page",
+          "page_select": "Rename / change columns",
+          "page_move": "Move a page",
+          "page_remove": "Remove a page",
+          "init": "Back to dashboard editor"
+        }
+      },
+      "page_add": {
+        "title": "New page",
+        "data": {
+          "title": "Page title",
+          "columns": "Columns"
+        }
+      },
+      "page_select": {
+        "title": "Choose page",
+        "data": {
+          "page": "Page"
+        }
+      },
+      "page_details": {
+        "title": "Edit page",
+        "description": "Maximum three rows; first remove cards if reducing columns.",
+        "data": {
+          "title": "Page title",
+          "columns": "Columns"
+        }
+      },
+      "page_move": {
+        "title": "Move page",
+        "data": {
+          "page": "Page",
+          "direction": "Direction"
+        }
+      },
+      "page_remove": {
+        "title": "Delete page",
+        "description": "All cards on the selected page will be deleted. This cannot be undone.",
+        "data": {
+          "page": "Page",
+          "confirm": "Confirm deletion"
+        }
+      },
+      "tiles_page": {
+        "title": "Select page for tiles",
+        "data": {
+          "page": "Page"
+        }
+      },
+      "tiles": {
+        "title": "Tiles",
+        "menu_options": {
+          "tile_add": "Add tile",
+          "tile_select": "Edit tile",
+          "tile_move": "Move tile up/down",
+          "tile_remove": "Remove tile",
+          "tiles_page": "Choose another page",
+          "init": "Back to dashboard editor"
+        }
+      },
+      "tile_add": {
+        "title": "Add tile",
+        "description": "Choose an entity using the Home Assistant entity picker. Min/max apply to gauges.",
+        "data": {
+          "type": "Tile type",
+          "label": "Title",
+          "entity_id": "Entity",
+          "clear_entity": "Leave unassigned",
+          "min": "Gauge minimum",
+          "max": "Gauge maximum"
+        }
+      },
+      "tile_select": {
+        "title": "Choose tile",
+        "data": {
+          "tile": "Tile"
+        }
+      },
+      "tile_details": {
+        "title": "Edit tile",
+        "description": "To clear the existing entity, enable Leave unassigned.",
+        "data": {
+          "type": "Tile type",
+          "label": "Title",
+          "entity_id": "Entity",
+          "clear_entity": "Leave unassigned",
+          "min": "Gauge minimum",
+          "max": "Gauge maximum"
+        }
+      },
+      "tile_move": {
+        "title": "Reorder tile",
+        "data": {
+          "tile": "Tile",
+          "direction": "Direction"
+        }
+      },
+      "tile_remove": {
+        "title": "Delete tile",
+        "description": "The chosen tile will be removed from the dashboard.",
+        "data": {
+          "tile": "Tile",
+          "confirm": "Confirm deletion"
+        }
+      },
+      "done": {
+        "title": "Done"
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the frame. Check Wi-Fi and the HA integration setting on the PF1007.",
+      "invalid_config": "The frame rejected the layout or CSS. Check the fields and supported Canvas CSS.",
+      "limit_reached": "Page or tile limit reached.",
+      "invalid_move": "This item cannot be moved in that direction.",
+      "last_page": "At least one page must remain.",
+      "not_confirmed": "Confirm deletion to continue."
+    }
   }
 }

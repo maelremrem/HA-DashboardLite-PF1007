@@ -1,0 +1,52 @@
+name: Build and validate
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Home Assistant integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Python sources
+        run: python -m compileall -q custom_components/ha_frame
+      - name: Validate manifest and translations
+        run: |
+          python -m json.tool custom_components/ha_frame/manifest.json > /dev/null
+          python -m json.tool custom_components/ha_frame/strings.json > /dev/null
+          python -m json.tool custom_components/ha_frame/translations/en.json > /dev/null
+          python -m json.tool custom_components/ha_frame/translations/fr.json > /dev/null
+      - name: Run dashboard editor tests
+        run: python -m unittest discover -s tests -p 'test_dashboard_editor.py' -v
+      - name: Check web editor JavaScript
+        run: node --check app/src/main/assets/config/app.js
+
+  android:
+    name: Android 6 native app build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - name: Build debug APK
+        run: bash scripts/build-fedora.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HAFrame-PF1007-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

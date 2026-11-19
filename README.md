@@ -1,4 +1,4 @@
-# HA Frame — PF1007 native dashboard (v0.7)
+# HA Frame — PF1007 native dashboard (Android v0.7 / HA integration v0.8)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
 
@@ -11,6 +11,20 @@ The Android APK and the Home Assistant integration are separate installs.
 - **Marketplace / HACS:** The v0.7 integration and `hacs.json` are on `main`. The repository must be **public** for installation from the Home Assistant Marketplace; if it is private, make it public in GitHub's repository settings or install manually from a Git checkout.
 
 See [install from GitHub / Marketplace](docs/marketplace-installation.md) for both options.
+
+## V0.8 — Dashboard editor inside Home Assistant
+
+The Home Assistant integration now exposes a **Configure** wizard that edits the dashboard on the frame directly over its existing authenticated LAN API. No browser on the PF1007 and no temporary web configuration server needed.
+
+- Pick **Original / Ocean / Amber / Light** presets or keep your custom CSS.
+- Edit the full supported native Canvas CSS subset in a multiline field.
+- Create, rename, move and delete up to **4 pages**, selecting **2–4 columns**.
+- Add, edit, move and remove **metric, control, gauge, thermostat, light and cover** cards (up to **3 rows/page**) using Home Assistant's searchable entity selector.
+- Changes are sent to the frame immediately; no YAML or JSON editing required.
+
+This release changes **only the HA integration**. The existing Android **v0.7 APK** continues to work; stored HA credentials and brightness/night settings are unchanged. The editor is a guided native Home Assistant form (up/down reordering, **not drag-and-drop**).
+
+See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
 ## V0.7 — Specialized cards, ambient light and Home Assistant integration
 
