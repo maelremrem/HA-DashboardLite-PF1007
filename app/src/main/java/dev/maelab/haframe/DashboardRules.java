@@ -20,9 +20,13 @@ final class DashboardRules {
         String entity = rule.optString("entity_id", "");
         String op = rule.optString("operator", "");
         String value = rule.optString("value", "");
-        if (!entity.matches("[a-z0-9_]+\\.[a-z0-9_]+") || value.length() > 64 ||
+        if ((!"time_between".equals(op) && !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+")) ||
+            ("time_between".equals(op) && !entity.isEmpty() &&
+                !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+")) ||
+            value.length() > 64 ||
             !("equals".equals(op) || "not_equals".equals(op) || "above".equals(op) ||
-                "below".equals(op) || "on".equals(op) || "off".equals(op))) {
+                "below".equals(op) || "on".equals(op) || "off".equals(op) ||
+                "time_between".equals(op))) {
             throw new IllegalArgumentException("Invalid rule");
         }
         java.util.Iterator<String> keys = rule.keys();
@@ -37,6 +41,10 @@ final class DashboardRules {
         if (("equals".equals(op) || "not_equals".equals(op)) && value.isEmpty()) {
             throw new IllegalArgumentException("Empty comparison");
         }
+        if ("time_between".equals(op) &&
+            !value.matches("(?:[01]\\d|2[0-3]):[0-5]\\d-(?:[01]\\d|2[0-3]):[0-5]\\d")) {
+            throw new IllegalArgumentException("Invalid time window");
+        }
         if ("above".equals(op) || "below".equals(op)) {
             if (!value.matches("-?\\d{1,6}(?:\\.\\d{1,3})?"))
                 throw new IllegalArgumentException("Invalid numeric rule");
@@ -47,9 +55,24 @@ final class DashboardRules {
     }
 
     static boolean matches(JSONObject rule, String actual) {
-        if (rule == null || actual == null || "unknown".equals(actual) ||
-            "unavailable".equals(actual)) return false;
+        if (rule == null) return false;
         String op = rule.optString("operator", "");
+        if ("time_between".equals(op)) {
+            String range = rule.optString("value", "");
+            if (!range.matches("(?:[01]\\d|2[0-3]):[0-5]\\d-(?:[01]\\d|2[0-3]):[0-5]\\d"))
+                return false;
+            String[] parts = range.split("-");
+            int start = Integer.parseInt(parts[0].substring(0,2))*60 +
+                Integer.parseInt(parts[0].substring(3,5));
+            int end = Integer.parseInt(parts[1].substring(0,2))*60 +
+                Integer.parseInt(parts[1].substring(3,5));
+            java.util.Calendar now = java.util.Calendar.getInstance();
+            int minute = now.get(java.util.Calendar.HOUR_OF_DAY)*60 +
+                now.get(java.util.Calendar.MINUTE);
+            return start <= end ? minute >= start && minute < end :
+                minute >= start || minute < end;
+        }
+        if (actual == null || "unknown".equals(actual) || "unavailable".equals(actual)) return false;
         String wanted = rule.optString("value", "");
         if ("equals".equals(op)) return wanted.equals(actual);
         if ("not_equals".equals(op)) return !wanted.equals(actual);
