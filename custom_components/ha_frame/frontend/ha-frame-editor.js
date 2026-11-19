@@ -215,10 +215,11 @@ function validTileStyle(style) {
 function isAdvancedPage(page) {
   return page.cards.some(tile=>tile.type==="weather" || tile.type==="graph" ||
     (tile.col_span||1)!==1 || (tile.row_span||1)!==1 ||
+    (tile.icon && tile.icon !== "none") ||
     (tile.style && Object.keys(tile.style).length>0));
 }
 function compatibleVersion(version) {
-  const parts=String(version||"").match(/^(\d+)\.(\d+)\.(\d+)/);
+  const parts=String(version||"").match(/^v?(\d+)\.(\d+)\.(\d+)/);
   return Boolean(parts && Number(parts[1])>=1);
 }
 
@@ -778,7 +779,7 @@ class HaFrameVisualEditor extends HTMLElement {
       }
       return;
     }
-    if (target.dataset.bind === "columns" || target.dataset.bind === "card-type") {
+    if (["columns","card-type","card-icon","card-colspan","card-rowspan"].includes(target.dataset.bind)) {
       this._input(event);
       this._inspector();
     }
@@ -791,18 +792,54 @@ class HaFrameVisualEditor extends HTMLElement {
     else if (bind === "css") this._config.custom_css = target.value;
     else if (bind === "page-title") page.title = target.value;
     else if (bind === "columns") {
-      const cols = Number(target.value);
-      if (page.cards.length > cols * 3) {
-        this._message("Retire des tuiles avant de réduire les colonnes", true);
-        target.value = page.columns; return;
-      }
+      const cols = Number(target.value), previous = page.columns;
       page.columns = cols;
+      try { gridPlacement(page); }
+      catch (error) {
+        page.columns = previous;
+        target.value = String(previous);
+        this._message(error.message, true);
+        return;
+      }
     } else if (tile) {
       if (bind === "card-type") tile.type = target.value;
       if (bind === "card-label") tile.label = target.value;
       if (bind === "card-entity") tile.entity_id = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
+      if (bind === "card-icon") tile.icon = target.value;
+      if (bind === "card-colspan" || bind === "card-rowspan") {
+        const key = bind === "card-colspan" ? "col_span" : "row_span";
+        const previous = tile[key] || 1;
+        tile[key] = Number(target.value);
+        try { gridPlacement(page); }
+        catch (error) {
+          tile[key] = previous;
+          target.value = String(previous);
+          this._message(error.message, true);
+          return;
+        }
+      }
+      if (bind.startsWith("style-")) {
+        const key = bind.slice(6);
+        if (!TILE_STYLE_KEYS.includes(key)) return;
+        const style = tile.style ||= {};
+        if (key === "radius") {
+          if (target.value === "") delete style.radius;
+          else {
+            const radius = Number(target.value);
+            if (!Number.isInteger(radius) || radius < 0 || radius > 72) {
+              this._message("Rayon : entre 0 et 72 px", true); return;
+            }
+            style.radius = radius;
+          }
+        } else if (/^#[0-9a-fA-F]{6}$/.test(target.value)) {
+          style[key] = target.value;
+        } else {
+          this._message("Couleur invalide", true); return;
+        }
+        if (!Object.keys(style).length) delete tile.style;
+      }
     }
     this._mark();
     this._preview();
@@ -839,7 +876,14 @@ class HaFrameVisualEditor extends HTMLElement {
     if (from === to || from < 0 || to < 0) return;
     const cards = this._pageObject().cards;
     if (!cards[from] || !cards[to]) return;
+    const original = clone(cards);
     cards.splice(to, 0, cards.splice(from, 1)[0]);
+    try { gridPlacement(this._pageObject()); }
+    catch (error) {
+      cards.splice(0, cards.length, ...original);
+      this._message(error.message, true);
+      return;
+    }
     this._tile = to;
     this._mark();
     this._render();
@@ -852,13 +896,24 @@ class HaFrameVisualEditor extends HTMLElement {
     for (const page of cfg.pages) {
       if (!page.title.trim() || page.title.length > 32) return "Titre de page invalide";
       if (![2,3,4].includes(page.columns) || page.cards.length > page.columns * 3) return "Trop de tuiles pour la grille";
+      try { gridPlacement(page); }
+      catch (error) { return error.message; }
       for (const tile of page.cards) {
         if (!TYPES.some(([type])=>type===tile.type)) return "Type de tuile invalide";
+        if (tile.icon && !ICON_OPTIONS.some(([id])=>id===tile.icon)) return "Icône invalide";
+        if (tile.style && !validTileStyle(tile.style)) return "Style de tuile invalide";
+        if (tile.type === "camera" && tile.entity_id && !tile.entity_id.startsWith("camera.")) return "Choisir une entité camera.*";
+        if (tile.type === "weather" && tile.entity_id && !tile.entity_id.startsWith("weather.")) return "Choisir une entité weather.*";
         if (tile.label.length > 48) return "Titre de tuile trop long";
         if (tile.entity_id && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(tile.entity_id)) return "Entité invalide : " + tile.entity_id;
         if (!Number.isFinite(Number(tile.min)) || !Number.isFinite(Number(tile.max)) ||
             Number(tile.max) <= Number(tile.min)) return "Plage de jauge invalide";
       }
+    }
+    const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    if (cfg.pages.some(isAdvancedPage) && frame && frame.version &&
+        !compatibleVersion(frame.version)) {
+      return "Les widgets avancés, icônes et tailles requièrent l’APK Android v1.0.0 ou supérieur";
     }
     return "";
   }
@@ -921,13 +976,21 @@ class HaFrameVisualEditor extends HTMLElement {
     } else if (action === "add-tile") {
       if (page.cards.length>=page.columns*3) return this._message("Limite de tuiles atteinte",true);
       page.cards.push({type:"metric",label:"Nouvelle tuile",entity_id:"",min:0,max:100});
+      try { gridPlacement(page); }
+      catch (error) { page.cards.pop(); return this._message(error.message,true); }
       this._tile=page.cards.length-1;this._panel="tile";
+    } else if (action === "clear-tile-style") {
+      if (!tile) return;
+      delete tile.style;
     } else if (action === "delete-tile") {
       if (!tile || !confirm("Supprimer cette tuile ?")) return;
       page.cards.splice(this._tile,1);this._tile=-1;this._panel="page";
     } else if (action === "duplicate-tile") {
       if (!tile || page.cards.length>=page.columns*3) return;
-      page.cards.splice(this._tile+1,0,clone(tile));this._tile++;
+      page.cards.splice(this._tile+1,0,clone(tile));
+      try { gridPlacement(page); }
+      catch (error) { page.cards.splice(this._tile+1,1); return this._message(error.message,true); }
+      this._tile++;
     } else if (action === "tile-left" || action === "tile-right") {
       if (!tile) return;
       return this._reorder(this._tile,this._tile+(action==="tile-left"?-1:1));
