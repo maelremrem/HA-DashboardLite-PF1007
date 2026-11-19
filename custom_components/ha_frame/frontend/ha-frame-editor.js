@@ -1,8 +1,9 @@
 /* HA Frame visual editor - bundled with the Home Assistant integration. */
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
-  ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"]
+  ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"],
+  ["weather", "Météo"], ["graph", "Courbe"]
 ];
 const PRESETS = {
   original: "",
@@ -121,6 +122,64 @@ function withDesign(css, shape, typography) {
 function withShape(css, shape) { return withDesign(css, shape, readTypography(css)); }
 function withTypography(css, typography) { return withDesign(css, readShape(css), typography); }
 
+const TILE_STYLE_KEYS = ["background", "foreground", "accent", "radius"];
+function gridPlacement(page) {
+  const cols = page.columns;
+  if (![2,3,4].includes(cols) || page.cards.length > cols*3) throw new Error("Grille invalide");
+  const used = Array.from({length:3},()=>Array(cols).fill(false));
+  const cells = [];
+  let rows = 1;
+  for (const tile of page.cards) {
+    const w = tile.col_span == null ? 1 : tile.col_span;
+    const h = tile.row_span == null ? 1 : tile.row_span;
+    if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || w > cols || h < 1 || h > 2) {
+      throw new Error("Taille de tuile invalide");
+    }
+    let position = null;
+    for (let row=0; row+h<=3 && !position; row++) {
+      for (let col=0; col+w<=cols; col++) {
+        let free = true;
+        for (let y=row; y<row+h; y++) for (let x=col; x<col+w; x++) {
+          if (used[y][x]) free=false;
+        }
+        if (!free) continue;
+        for (let y=row; y<row+h; y++) for (let x=col; x<col+w; x++) used[y][x]=true;
+        position={col,row,w,h};
+        rows=Math.max(rows,row+h);
+        break;
+      }
+    }
+    if (!position) throw new Error("Pas assez de place pour ces tailles de tuiles");
+    cells.push(position);
+  }
+  return {cells,rows,used:page.cards.reduce((n,t)=>n+(t.col_span||1)*(t.row_span||1),0)};
+}
+function previewCss(rules, scale, ...names) {
+  const combined = {};
+  for (const name of names) Object.assign(combined, rules[name] || {});
+  for (const key of ["font-size","border-radius"]) {
+    if (combined[key]) combined[key]=Math.max(key==="font-size"?7:0,
+      Number.parseInt(combined[key],10)*scale).toFixed(1)+"px";
+  }
+  return attr(combined);
+}
+function validTileStyle(style) {
+  if (!style || typeof style !== "object" || Array.isArray(style)) return false;
+  if (Object.keys(style).some(key=>!TILE_STYLE_KEYS.includes(key))) return false;
+  return ["background","foreground","accent"].every(key=>style[key] == null ||
+    (typeof style[key] === "string" && /^#[0-9a-fA-F]{6}$/.test(style[key]))) &&
+    (style.radius == null || (Number.isInteger(style.radius) && style.radius>=0 && style.radius<=72));
+}
+function isAdvancedPage(page) {
+  return page.cards.some(tile=>tile.type==="weather" || tile.type==="graph" ||
+    (tile.col_span||1)!==1 || (tile.row_span||1)!==1 ||
+    (tile.style && Object.keys(tile.style).length>0));
+}
+function compatibleVersion(version) {
+  const parts=String(version||"").match(/^(\d+)\.(\d+)\.(\d+)/);
+  return Boolean(parts && Number(parts[1])>=1);
+}
+
 const LAYOUT_TEMPLATES = [
   {id:"overview", name:"Vue générale", columns:3, tiles:[
     ["metric","Température"], ["metric","Humidité"], ["metric","Puissance"],
@@ -137,12 +196,26 @@ const LAYOUT_TEMPLATES = [
   {id:"security", name:"Sécurité", columns:3, tiles:[
     ["control","Alarme"], ["metric","Entrée"], ["metric","Garage"],
     ["cover","Porte garage"], ["light","Extérieur"], ["metric","Présence"]]},
-  {id:"dense", name:"12 tuiles", columns:4, tiles:Array.from({length:12}, (_,i)=>["metric","Capteur "+(i+1)])}
+  {id:"dense", name:"12 tuiles", columns:4, tiles:Array.from({length:12}, (_,i)=>["metric","Capteur "+(i+1)])},
+  {id:"weather-home",name:"Météo & maison",columns:3,tiles:[
+    ["weather","Météo"],["metric","Température"],["metric","Humidité"],["light","Salon"],["control","Maison"]],
+    spans:[[2,1],[1,1],[1,1],[1,1],[1,1]]},
+  {id:"energy-trend",name:"Énergie & tendance",columns:3,tiles:[
+    ["graph","Courbe de puissance"],["metric","Puissance"],["gauge","Batterie"],["metric","Énergie totale"]],
+    spans:[[2,2],[1,1],[1,1],[1,1]]}
 ];
 function templatePage(template) {
   return {
     title: template.name, columns: template.columns,
-    cards: template.tiles.map(([type,label])=>({type,label,entity_id:"",min:0,max:100}))
+    cards: template.tiles.map(([type,label],i)=>{
+      const tile={type,label,entity_id:"",min:0,max:100};
+      if (template.spans && template.spans[i]) {
+        const [w,h]=template.spans[i];
+        if (w>1) tile.col_span=w;
+        if (h>1) tile.row_span=h;
+      }
+      return tile;
+    })
   };
 }
 
