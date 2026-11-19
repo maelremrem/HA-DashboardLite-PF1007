@@ -246,6 +246,75 @@ async def editor_snapshot_get(hass, connection, msg):
         connection.send_result(msg["id"], {"config": validate_layout(config)})
 
 
+
+DIAGNOSTIC_FIELDS = {
+    "version", "android_version", "uptime_seconds", "wifi_connected",
+    "wifi_ssid", "wifi_ip", "wifi_rssi_dbm", "wifi_quality_percent",
+    "wifi_link_speed_mbps", "wifi_frequency_mhz", "sleeping",
+    "effective_brightness", "lux", "lux_source",
+}
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/diagnostics",
+    vol.Required("entry_id"): str,
+})
+@websocket_api.async_response
+async def editor_diagnostics(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    try:
+        info = await coordinator.api.status()
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Could not read frame status")
+        return
+    connection.send_result(msg["id"], {
+        "diagnostics": {key: info.get(key) for key in DIAGNOSTIC_FIELDS}
+    })
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/screenshot",
+    vol.Required("entry_id"): str,
+})
+@websocket_api.async_response
+async def editor_screenshot(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    try:
+        image = await coordinator.api.screenshot()
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Screenshot unavailable")
+        return
+    connection.send_result(msg["id"], image)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/reload",
+    vol.Required("entry_id"): str,
+    vol.Required("confirmation"): "reload_dashboard",
+})
+@websocket_api.async_response
+async def editor_reload(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    try:
+        await coordinator.api.reload_dashboard()
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Dashboard reload failed")
+        return
+    connection.send_result(msg["id"], {"ok": True})
+
+
 def async_register_editor_commands(hass):
     """Called once during integration setup, never once per frame."""
     websocket_api.async_register_command(hass, editor_list)
@@ -257,3 +326,6 @@ def async_register_editor_commands(hass):
     websocket_api.async_register_command(hass, editor_profile_delete)
     websocket_api.async_register_command(hass, editor_snapshots)
     websocket_api.async_register_command(hass, editor_snapshot_get)
+    websocket_api.async_register_command(hass, editor_diagnostics)
+    websocket_api.async_register_command(hass, editor_screenshot)
+    websocket_api.async_register_command(hass, editor_reload)
