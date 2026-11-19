@@ -251,7 +251,7 @@ DIAGNOSTIC_FIELDS = {
     "version", "android_version", "uptime_seconds", "wifi_connected",
     "wifi_ssid", "wifi_ip", "wifi_rssi_dbm", "wifi_quality_percent",
     "wifi_link_speed_mbps", "wifi_frequency_mhz", "sleeping",
-    "effective_brightness", "lux", "lux_source",
+    "effective_brightness", "lux", "lux_source", "signing_cert_sha256",
 }
 
 
