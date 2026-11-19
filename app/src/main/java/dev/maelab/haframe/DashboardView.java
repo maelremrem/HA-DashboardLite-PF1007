@@ -35,6 +35,7 @@ final class DashboardView extends View {
     private final SimpleDateFormat date = new SimpleDateFormat("EEEE d MMMM", Locale.FRANCE);
     private final RectF bounds = new RectF();
     private FrameConfig config = new FrameConfig();
+    private CanvasTheme theme = CanvasTheme.parse("");
     private HaClient client;
     private Callbacks callbacks;
     private String status = "Configuration nécessaire";
@@ -62,7 +63,12 @@ final class DashboardView extends View {
     }
 
     void setCallbacks(Callbacks callbacks) { this.callbacks = callbacks; }
-    void setConfig(FrameConfig config) { this.config = config; invalidate(); }
+    void setConfig(FrameConfig config) {
+        this.config = config;
+        try { this.theme = CanvasTheme.parse(config.customCss); }
+        catch (IllegalArgumentException ignored) { this.theme = CanvasTheme.parse(""); }
+        invalidate();
+    }
     void setClient(HaClient client) { this.client = client; invalidate(); }
     void setStatus(String status, boolean connected) {
         this.status = status;
@@ -103,24 +109,38 @@ final class DashboardView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        canvas.drawColor(BG);
+        canvas.drawColor(theme.color(BG, "background-color", "body"));
         scale = Math.min(getWidth() / 1280f, getHeight() / 800f);
         dx = (getWidth() - 1280f * scale) / 2f;
         dy = (getHeight() - 800f * scale) / 2f;
         canvas.save();
         canvas.translate(dx, dy);
         canvas.scale(scale, scale);
-        text(canvas, "HA FRAME", 50, 66, 36, TEXT, true);
-        text(canvas, "Tableau de bord", 52, 101, 19, MUTED, false);
-        rect(canvas, 865, 35, 12, 12, 6, connected ? ACCENT : 0xFFFFB56A);
-        text(canvas, shortText((connected ? "" : "↻ ") + status, 23), 890, 47, 17, MUTED, false);
-        rect(canvas, 1130, 23, 105, 58, 18, PANEL);
-        text(canvas, "RÉGLAGES", 1144, 60, 17, TEXT, true);
-        text(canvas, clock.format(new Date()), 52, 171, 40, TEXT, true);
-        text(canvas, date.format(new Date()), 245, 165, 19, MUTED, false);
-        text(canvas, "CAPTEURS", 52, 219, 18, MUTED, true);
+        text(canvas, shortText(config.title, 28), 50, 66,
+            theme.size(36, "font-size", ".header"),
+            theme.color(TEXT, "color", ".header"), theme.bold(true, ".header"));
+        text(canvas, "Tableau de bord", 52, 101,
+            theme.size(19, "font-size", ".subtitle"), theme.color(MUTED, "color", ".subtitle"),
+            theme.bold(false, ".subtitle"));
+        rect(canvas, 865, 35, 12, 12, 6,
+            connected ? theme.color(ACCENT, "color", ".accent") : 0xFFFFB56A);
+        text(canvas, shortText((connected ? "" : "↻ ") + status, 23), 890, 47,
+            theme.size(17, "font-size", ".status"), theme.color(MUTED, "color", ".status"), false);
+        rect(canvas, 1130, 23, 105, 58, theme.size(18, "border-radius", ".settings"),
+            theme.color(PANEL, "background-color", ".settings"));
+        text(canvas, "RÉGLAGES", 1144, 60, 17,
+            theme.color(TEXT, "color", ".settings"), true);
+        text(canvas, clock.format(new Date()), 52, 171,
+            theme.size(40, "font-size", ".clock"), theme.color(TEXT, "color", ".clock"),
+            theme.bold(true, ".clock"));
+        text(canvas, date.format(new Date()), 245, 165,
+            theme.size(19, "font-size", ".date"), theme.color(MUTED, "color", ".date"),
+            theme.bold(false, ".date"));
+        text(canvas, "CAPTEURS", 52, 219, 18,
+            theme.color(MUTED, "color", ".section"), true);
         for (int i = 0; i < FrameConfig.METRICS; i++) drawMetric(canvas, i);
-        text(canvas, "COMMANDES", 52, 426, 18, MUTED, true);
+        text(canvas, "COMMANDES", 52, 426, 18,
+            theme.color(MUTED, "color", ".section"), true);
         for (int i = 0; i < FrameConfig.CONTROLS; i++) drawControl(canvas, i);
         canvas.restore();
     }
@@ -128,8 +148,13 @@ final class DashboardView extends View {
     private void drawMetric(Canvas c, int index) {
         float x = 50 + index * 394;
         float y = 237;
-        rect(c, x, y, 376, 145, 20, PANEL);
-        text(c, shortText(config.labels[index], 21), x + 22, y + 40, 21, MUTED, false);
+        String slot = ".metric-" + (index + 1);
+        rect(c, x, y, 376, 145, theme.size(20, "border-radius", ".metric", slot),
+            theme.color(PANEL, "background-color", ".metric", slot));
+        text(c, shortText(config.labels[index], 21), x + 22, y + 40,
+            theme.size(21, "font-size", ".metric-label", slot),
+            theme.color(MUTED, "color", ".metric-label", slot),
+            theme.bold(false, ".metric-label", slot));
         String value = "À configurer";
         int color = 0xFF78879D;
         String entity = config.ids[index];
@@ -144,7 +169,10 @@ final class DashboardView extends View {
                 color = TEXT;
             }
         }
-        text(c, shortText(value, 23), x + 22, y + 109, 36, color, true);
+        text(c, shortText(value, 23), x + 22, y + 109,
+            theme.size(36, "font-size", ".metric-value", slot),
+            theme.color(color, "color", ".metric-value", slot),
+            theme.bold(true, ".metric-value", slot));
     }
 
     private void drawControl(Canvas c, int index) {
@@ -157,14 +185,25 @@ final class DashboardView extends View {
         HaClient.EntityState state = entity.isEmpty() || client == null ? null : client.get(entity);
         String actual = state == null ? "" : state.state;
         boolean on = connected && ("on".equals(actual) || "open".equals(actual) || "playing".equals(actual));
-        rect(c, x, y, 376, 133, 20, (touchedControl == index || feedbackControl == index)
-            ? PANEL_PRESSED : (on ? PANEL_ON : PANEL));
-        rect(c, x + 22, y + 24, 12, 12, 6, on ? ACCENT : 0xFF66768D);
-        text(c, shortText(config.labels[i], 24), x + 50, y + 39, 25, TEXT, true);
+        String slot = ".control-" + (index + 1);
+        boolean pressed = touchedControl == index || feedbackControl == index;
+        String stateSelector = pressed ? ".control.pressed" : on ? ".control.on" : ".control";
+        int defaultColor = pressed ? PANEL_PRESSED : on ? PANEL_ON : PANEL;
+        rect(c, x, y, 376, 133, theme.size(20, "border-radius", ".control", slot),
+            theme.color(defaultColor, "background-color", ".control", slot, stateSelector));
+        rect(c, x + 22, y + 24, 12, 12, 6,
+            on ? theme.color(ACCENT, "color", ".accent") : 0xFF66768D);
+        text(c, shortText(config.labels[i], 24), x + 50, y + 39,
+            theme.size(25, "font-size", ".control-label", slot),
+            theme.color(TEXT, "color", ".control-label", slot),
+            theme.bold(true, ".control-label", slot));
         String secondary = entity.isEmpty() ? "À configurer" : (!connected ? "Hors ligne" : (state == null ? "En attente…" : actual));
         if ("on".equals(secondary)) secondary = "Allumé";
         if ("off".equals(secondary)) secondary = "Éteint";
-        text(c, shortText(secondary, 28), x + 23, y + 94, 19, MUTED, false);
+        text(c, shortText(secondary, 28), x + 23, y + 94,
+            theme.size(19, "font-size", ".control-state", slot),
+            theme.color(MUTED, "color", ".control-state", slot),
+            theme.bold(false, ".control-state", slot));
     }
 
     private int controlAt(float x, float y) {

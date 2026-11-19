@@ -34,7 +34,7 @@ final class ConfigWebServer {
     static final String ACTION_CONFIG_UPDATED = "dev.maelab.haframe.CONFIG_UPDATED";
     static final int PORT = 8765;
     private static final long DURATION_MS = 15 * 60 * 1000L;
-    private static final int MAX_BODY = 16 * 1024;
+    private static final int MAX_BODY = 32 * 1024;
     private static final String TAG = "HAFrameConfig";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static ConfigWebServer current;
@@ -229,6 +229,8 @@ final class ConfigWebServer {
                 }
                 json(output, 200, new JSONObject()
                     .put("url", config.baseUrl)
+                    .put("dashboard_title", config.title)
+                    .put("custom_css", config.customCss)
                     .put("token_set", TokenVault.hasToken(context))
                     .put("slots", slots), null);
             } else if ("GET".equals(req.method) && "/api/entities".equals(req.path)) {
@@ -346,11 +348,17 @@ final class ConfigWebServer {
     }
 
     private void saveConfiguration(JSONObject body) throws Exception {
-        FrameConfig config = new FrameConfig();
+        FrameConfig config = FrameConfig.load(context);
         String endpoint = body.optString("url", "").trim();
         if (endpoint.length() > 255) throw new IllegalArgumentException("URL trop longue");
         config.baseUrl = endpoint;
         config.webSocketUrl();
+        String title = body.optString("dashboard_title", config.title).trim();
+        if (title.length() > 28) throw new IllegalArgumentException("Titre trop long (28 caractères maximum)");
+        config.title = title.isEmpty() ? "HA FRAME" : title;
+        String customCss = body.optString("custom_css", config.customCss);
+        CanvasTheme.parse(customCss);
+        config.customCss = customCss;
         JSONArray slots = body.getJSONArray("slots");
         if (slots.length() != FrameConfig.COUNT) throw new IllegalArgumentException("Nombre de cartes incorrect");
         for (int i = 0; i < FrameConfig.COUNT; i++) {
