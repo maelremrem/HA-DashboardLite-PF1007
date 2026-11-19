@@ -473,21 +473,28 @@ class HaFrameVisualEditor extends HTMLElement {
     if (!target) return;
     const config = this._config, page = this._pageObject();
     const rules = nativeCss(config.custom_css);
-    const background = combine(rules, "body");
-    const activeTabs = config.pages.map((p,i) => "<div class='screen-tab" + (i===this._page ? " active" : "") + "' style='" +
-      combine(rules, ".page-tab", i===this._page ? ".page-tab.active" : "") + "'>" + esc(p.title) + "</div>").join("");
+    const scale = Math.max(.2, Math.min(1.2, (target.clientWidth || 640) / 1280));
+    const css = (...selectors) => previewCss(rules, scale, ...selectors);
+    let layout;
+    try { layout = gridPlacement(page); }
+    catch (error) { this._message(error.message || String(error), true); return; }
     const states = this._hass && this._hass.states || {};
+    this._graphSamples ||= {};
+    const activeTabs = config.pages.map((p,i) => "<div class='screen-tab" +
+      (i===this._page ? " active" : "") + "' style='" +
+      css(".page-tab", i===this._page ? ".page-tab.active" : "") + "'>" +
+      esc(p.title) + "</div>").join("");
     const grid = page.cards.map((tile,i) => {
       const entity = states[tile.entity_id], raw = entity && entity.state || "—";
       const attrs = entity && entity.attributes || {};
-      const isOn = ["on","open","heat","cool"].includes(raw);
-      let value = raw === "—" ? "En attente…" : raw;
-      let hint = tile.entity_id || "Non configurée", percent = null;
+      const isOn = ["on","open","heat","cool","playing"].includes(raw);
+      let value = raw === "—" ? "—" : raw;
+      let hint = tile.entity_id || "Non configurée", percent = null, graph = "";
       if (tile.type === "metric" || tile.type === "gauge") {
         value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
         if (tile.type === "gauge") {
           const n = Number(raw), low = Number(tile.min || 0), high = Number(tile.max == null ? 100 : tile.max);
-          percent = Number.isFinite(n) && high>low ? Math.max(0,Math.min(100,(n-low)*100/(high-low))) : 0;
+          percent = raw !== "—" && Number.isFinite(n) && high>low ? Math.max(0,Math.min(100,(n-low)*100/(high-low))) : 0;
         }
       } else if (tile.type === "thermostat") {
         value = attrs.current_temperature != null ? attrs.current_temperature + " °C" : raw;
@@ -500,36 +507,83 @@ class HaFrameVisualEditor extends HTMLElement {
         percent = attrs.current_position == null ? null : Number(attrs.current_position);
       } else if (tile.type === "control") {
         value = isOn ? "Activé" : raw === "off" ? "Désactivé" : raw;
+      } else if (tile.type === "weather") {
+        value = attrs.temperature == null ? "—" : Math.round(Number(attrs.temperature)) + " °C";
+        const conditions = {sunny:"Ensoleillé",cloudy:"Nuageux",partlycloudy:"Éclaircies",
+          rainy:"Pluie",pouring:"Fortes pluies",snowy:"Neige","clear-night":"Ciel dégagé",
+          lightning:"Orage",fog:"Brouillard",windy:"Vent"};
+        hint = (conditions[raw] || raw) + (attrs.humidity != null ? " · " + attrs.humidity + "% HR" : "");
+      } else if (tile.type === "graph") {
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+        const n = Number(raw), key = this._frameId + "|" + tile.entity_id;
+        const series = this._graphSamples[key] ||= [];
+        if (tile.entity_id && raw !== "—" && Number.isFinite(n) &&
+            (series.length === 0 || series[series.length-1] !== n)) {
+          series.push(n);
+          if (series.length > 24) series.shift();
+        }
+        if (series.length >= 2) {
+          const low = Math.min(...series), high = Math.max(...series);
+          const range = Math.max(1e-6,high-low);
+          const points = series.map((n,j)=> (j*100/(series.length-1)).toFixed(1) +
+            "," + (90-(n-low)*80/range).toFixed(1)).join(" ");
+          graph = "<svg class='tile-graph' viewBox='0 0 100 100' preserveAspectRatio='none' " +
+            "aria-label='Tendance des dernières valeurs reçues'><polyline points='" + points + "'/></svg>";
+          hint = series.length + " valeurs depuis l'ouverture de Studio";
+        } else {
+          hint = "Collecte de la tendance sur le cadre…";
+        }
+      } else if (tile.type === "camera") {
+        value = "Caméra";
+        hint = tile.entity_id ? "Flux MJPEG depuis Home Assistant · 1 image/s" : "Choisir une entité camera.*";
       }
       const slot = tile.type === "metric"
         ? ".metric-" + page.cards.slice(0,i+1).filter(t=>t.type==="metric").length
         : ".control-" + page.cards.slice(0,i+1).filter(t=>t.type!=="metric").length;
-      const css = combine(rules, ".card", "." + tile.type, slot, isOn ? ".control.on" : "");
-      const labelCss = combine(rules, ".metric-label");
-      const valueCss = combine(rules, ".metric-value");
+      const individual = tile.style || {};
+      const tileCss = css(".card", "." + tile.type, slot, isOn ? ".control.on" : "");
+      const labelCss = css(".metric-label", "." + tile.type, slot);
+      const valueCss = css(".metric-value", "." + tile.type, slot);
+      const custom = [
+        individual.background ? "background-color:" + individual.background : "",
+        individual.foreground ? "color:" + individual.foreground : "",
+        Number.isInteger(individual.radius) ? "border-radius:" + individual.radius*scale + "px" : ""
+      ].filter(Boolean).join(";");
+      const labelColor = individual.foreground ? "color:" + individual.foreground : "";
+      const accent = individual.accent || "#67dbba";
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
-        Math.max(0,Math.min(100,Number(percent)||0)) + "%'></i></div>";
-      return "<div class='screen-tile" + (this._tile===i?" selected":"") + "' data-tile='" + i +
-        "' role='button' tabindex='0' draggable='true' style='" + css + "'>" +
-        "<div class='tile-label' style='" + labelCss + "'>" + esc(tile.label || tile.type) + "</div>" +
-        "<div class='tile-value' style='" + valueCss + "'>" + esc(value) + "</div>" + bar +
-        "<div class='tile-hint'>" + esc(hint) + "</div></div>";
+        Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
+      const cell = layout.cells[i];
+      const icon = tileIconMarkup(tile.icon || "", tile.type, accent);
+      const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
+        "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
+      return "<div class='screen-tile" + (this._tile===i?" selected":"") +
+        "' data-tile='" + i + "' role='button' tabindex='0' draggable='true' style='" +
+        tileCss + ";" + custom + ";grid-column:" + (cell.col+1) + " / span " + cell.w +
+        ";grid-row:" + (cell.row+1) + " / span " + cell.h + "'>" +
+        icon + "<div class='tile-label' style='" + labelCss + ";" + labelColor + "'>" +
+        esc(tile.label || tile.type) + "</div>" +
+        (tile.type === "camera" ? camera : "<div class='tile-value' style='" + valueCss + ";" + labelColor + "'>" +
+        esc(value) + "</div>") +
+        (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
+        "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div></div>";
     }).join("");
     const date = new Intl.DateTimeFormat("fr-FR", {weekday:"long",day:"numeric",month:"long"}).format(new Date());
     const clock = new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",minute:"2-digit"}).format(new Date());
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
-    target.setAttribute("style", background);
+    const rowPct = Math.min(183/472*100, (472-(layout.rows-1)*15)/layout.rows/472*100);
+    target.setAttribute("style", css("body"));
     target.innerHTML = "<div class='screen-inner'>" +
-      "<div class='screen-header'><div><div class='screen-title' style='" + combine(rules, ".header") +
-      "'>" + esc(config.dashboard_title) + "</div><div class='screen-sub' style='" + combine(rules, ".subtitle") +
-      "'>Tableau de bord</div></div><div class='screen-online' style='" + combine(rules, ".status") +
-      "'>" + (frame && frame.online ? "● Connecté" : "○ Déconnecté") + "</div></div>" +
-      "<div class='screen-clock' style='" + combine(rules, ".clock") + "'>" + esc(clock) +
-      "<span class='screen-date' style='" + combine(rules, ".date") + "'>" + esc(date) + "</span></div>" +
+      "<div class='screen-header'><div><div class='screen-title' style='" + css(".header") +
+      "'>" + esc(config.dashboard_title) + "</div><div class='screen-sub' style='" +
+      css(".subtitle") + "'>Tableau de bord</div></div><div class='screen-online' style='" +
+      css(".status") + "'>" + (frame && frame.online ? "● Connecté" : "○ Déconnecté") + "</div></div>" +
+      "<div class='screen-clock' style='" + css(".clock") + "'>" + esc(clock) +
+      "<span class='screen-date' style='" + css(".date") + "'>" + esc(date) + "</span></div>" +
       "<div class='screen-tabs'>" + activeTabs + "</div>" +
       "<div class='screen-grid' style='grid-template-columns:repeat(" + page.columns +
-      ",minmax(0,1fr));grid-template-rows:repeat(" + Math.max(1,Math.ceil(page.cards.length/page.columns)) +
-      ",minmax(0,1fr))'>" + grid + "</div></div>";
+      ",minmax(0,1fr));grid-template-rows:repeat(" + layout.rows + "," +
+      rowPct.toFixed(3) + "%)'>" + grid + "</div></div>";
   }
   _inspector() {
     const target = this.shadowRoot.querySelector("[data-inspector]");
