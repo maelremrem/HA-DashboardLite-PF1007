@@ -343,8 +343,9 @@ final class DashboardView extends View {
             rect(canvas, x, y, w, h, radius, customColor(card.background, background));
             canvas.save();
             canvas.clipRect(x + 1, y + 1, x + w - 1, y + h - 1);
-            String icon = TileIcon.effective(card.icon, card.type);
-            TileIcon.draw(canvas, paint, icon, card.type, x + w - 52, y + 15, 28, accent);
+            String icon = card.iconPath.isEmpty() ? TileIcon.effective(card.icon, card.type) : card.icon;
+            TileIcon.draw(canvas, paint, card.icon, card.iconPath, card.type,
+                x + w - 52, y + 15, 28, accent);
             text(canvas, card.label.isEmpty() ? card.entityId : card.label, x + 20, y + 39,
                 theme.size(20, "font-size", ".metric-label", category, slot),
                 secondary, false, w - (icon.isEmpty() ? 40 : 83));
