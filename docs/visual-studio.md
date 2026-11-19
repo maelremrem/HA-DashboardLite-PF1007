@@ -1,4 +1,4 @@
-# HA Frame Studio — Home Assistant sidebar editor (integration v1.1.0)
+# HA Frame Studio — Home Assistant sidebar editor (integration v1.2.0)
 
 The Home Assistant integration now installs a dedicated **HA Frame Studio** sidebar panel. You can configure all paired PF1007 frames directly from Home Assistant, without manually adding a Lovelace card or JavaScript resource.
 
@@ -6,7 +6,7 @@ The editor is a standalone full-page panel at **/ha-frame-studio**, with the sam
 
 ## Setup
 
-1. Update the **HA Frame PF1007** integration to **v1.1.0** through HACS/Marketplace (or replace `custom_components/ha_frame` manually).
+1. Update the **HA Frame PF1007** integration to **v1.2.0** through HACS/Marketplace (or replace `custom_components/ha_frame` manually).
 2. Restart Home Assistant, then hard-refresh the browser if the panel is not immediately visible.
 3. Open **HA Frame Studio** from the left sidebar. Alternatively, visit `https://YOUR_HA_HOST/ha-frame-studio`.
 4. Select a frame using the dropdown at the top. The panel lists all paired frames.
@@ -22,13 +22,24 @@ The editor is a standalone full-page panel at **/ha-frame-studio**, with the sam
 - **Tile selection:** click a tile to edit its type, label, entity, and range.
 - **Reordering:** drag and drop tiles on desktop or use Before/After controls on touch.
 - **Pages:** add, remove, rename, reorder; choose 2/3/4 columns and up to 3 rows.
-- **Themes:** Original, Ocean, Amber, or Light; dashboard title.
+- **Themes:** 14 presets, including Minuit, Forêt, Lavande, Rose, Graphite, Solaire, Arctique, Rétro, Synthwave and Sable, shown as a color-swatch gallery.
+- **Design:** five card-corner treatments (standard, square, subtle, rounded, bubble) and three font-size presets (standard, compact, high readability).
+- **Layouts:** six predefined page templates (Overview, Climate, Energy, Lights, Security, and 12-tile Grid), added as a new page or used to replace an existing one. Templates have **no entity IDs**; configure them before they can control devices.
+- **Page cloning:** duplicate an existing page, preserving its entity assignments.
 - **CSS:** edit the native Android Canvas CSS subset with supported style previews.
 - **Copy from another frame:** choose a source and copy its layout into the editor.
 
 Click **Save to this frame** to apply a layout. Unsaved modifications stay in the editor until you explicitly save. Each frame stores its own pages, tiles, theme and CSS. Switching away with unsaved changes prompts you to confirm. A revision check prevents overwriting edits made elsewhere.
 
 **Safety:** clicking a tile only selects it; it never invokes Home Assistant services. The real Android controls still operate normally.
+
+## Themes, designs and page templates
+
+Click **Thèmes** in Studio to preview a palette. The current custom CSS is replaced **only after confirmation**, and all changes are unsaved until you explicitly save to the frame. The **Tile design** and **Typography** dropdowns append a reversible, native Canvas-compatible CSS block; existing custom CSS outside this generated block is preserved. **Standard** reverts those overrides to the selected theme's default styling.
+
+Click **Dispositions** to add a prefilled page or replace the current page. Replacing a populated page requires confirmation and **removes its existing tiles and entity assignments**. Adding a new page requires fewer than four pages in the layout. Templates use valid 2/3/4-column grids and at most three rows; the Android renderer's geometry is not altered. **Duplicate page** in the Page inspector clones the current page and its associated entities.
+
+The new presets in Studio and the Home Assistant options wizard work with the existing Android v0.9.0 renderer. New presets in the *on-device web configuration dropdown* require rebuilding/installing an APK with the updated web assets; this is not required for Studio.
 
 ## Optional legacy Lovelace card
 
@@ -59,7 +70,7 @@ entry_id: REPLACE_WITH_HA_FRAME_CONFIG_ENTRY_ID
 
 ## Troubleshooting
 
-- **Sidebar missing:** confirm integration v1.1.0 is installed and Home Assistant restarted. Open `/ha-frame-studio` directly. Check the user is an administrator.
+- **Sidebar missing:** confirm integration v1.2.0 is installed and Home Assistant restarted. Open `/ha-frame-studio` directly. Check the user is an administrator.
 - **Blank panel:** check `/ha-frame/ha-frame-studio-panel.js?v=1.1.0` and `/ha-frame/ha-frame-editor.js?v=1.1.0` are served by Home Assistant. Inspect browser console errors.
 - **Legacy card not found:** verify its module resource under Settings → Dashboards → Resources. This does not affect the sidebar.
 - **Frame offline:** confirm Wi-Fi and TCP port 8766. The editor accesses frames via Home Assistant's backend.
