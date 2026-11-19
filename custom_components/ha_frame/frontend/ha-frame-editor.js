@@ -899,7 +899,15 @@ class HaFrameVisualEditor extends HTMLElement {
       html = "<div class='inspector-head'><strong>Page " + esc(this._page + 1) + "</strong></div>" +
         "<label class='field'>Nom<input data-bind='page-title' maxlength='32' value='" + esc(page.title) + "'></label>" +
         "<label class='field'>Colonnes<select data-bind='columns'>" + [2,3,4].map(n=>option(n,n+" colonnes",page.columns)).join("") +
-        "</select></label><p class='hint'>Entre 1 et 4 pages, jusqu’à 3 rangées par page. Les cartes peuvent être déplacées en les faisant glisser.</p>" +
+        "</select></label><p class='hint'>Entre 1 et 4 pages, jusqu’à 3 rangées par page.</p>" +
+        "<div class='inspector-head'><strong>Page automatique</strong></div>" +
+        "<label class='field'>Entité déclencheuse<input data-bind='page-auto-entity' list='ha-frame-entities' placeholder='person.maison' value='" +
+          esc(page.activate_when?.entity_id || "") + "'></label>" +
+        "<label class='field'>Condition<select data-bind='page-auto-operator'>" +
+          RULE_OPERATORS.map(([key,label])=>option(key,label,page.activate_when?.operator || "equals")).join("") + "</select></label>" +
+        "<label class='field'>Valeur attendue<input data-bind='page-auto-value' maxlength='64' placeholder='home' value='" +
+          esc(page.activate_when?.value || "") + "'></label>" +
+        "<p class='hint'>Vide = navigation manuelle. Une page conditionnelle active passe en priorité ; une navigation manuelle suspend l'automatisme pendant 2 minutes.</p>" +
         "<div class='actions'><button data-action='page-left'>← Page</button><button data-action='page-right'>Page →</button>" +
         "<button data-action='duplicate-page'>Dupliquer page</button>" +
         "<button data-action='delete-page' class='danger'>Supprimer page</button></div>";
@@ -928,9 +936,13 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type==="camera" ? "<p class='hint'>Flux MJPEG via Home Assistant, avec repli JPEG (≈ 1 image/s). Un seul flux actif sur le cadre, sans audio. APK 1.0.0 requis.</p>" : "") +
         (tile.type==="graph" ? "<p class='hint'>Courbe des 24 derniers changements de valeur depuis la connexion du cadre ; sans historique permanent.</p>" : "") +
         (tile.type==="weather" ? "<p class='hint'>Utilise une entité météo Home Assistant : weather.*</p>" : "") +
-        (tile.type === "gauge" ? "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
+        (["gauge","circular_gauge"].includes(tile.type) ?
+          "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
           esc(tile.max) + "'></label></div>" : "") +
+        (tile.type==="history" ? "<label class='field'>Fenêtre d’historique<select data-bind='history-hours'>" +
+          [1,24,168].map(n=>option(n,n===1?"1 heure":n===24?"24 heures":"7 jours",tile.history_hours||24)).join("") +
+          "</select></label><p class='hint'>Historique réel via l’API HA, avec limitation des données côté Android.</p>" : "") +
         "<div class='inspector-head'><strong>Icône Home Assistant</strong></div>" +
         "<label class='field'>Icône MDI (vide = icône de l’entité)<input data-bind='card-icon' " +
         "list='ha-frame-mdi' maxlength='96' placeholder='mdi:lightbulb' value='" +
@@ -956,6 +968,28 @@ class HaFrameVisualEditor extends HTMLElement {
         "<div class='tile-style-grid'>" + appearance + "</div>" +
         "<label class='field'>Rayon des angles (px ; vide = thème)<input data-bind='style-radius' type='number' min='0' max='72' placeholder='Par défaut' value='" +
         esc(radius) + "'></label>" +
+        "<div class='inspector-head'><strong>Interactions tactiles</strong></div>" +
+        "<label class='field'>Appui court<select data-bind='tap-action'>" +
+        TAP_ACTIONS.map(([key,label])=>option(key,label,tile.tap_action||"default")).join("") +
+        "</select></label>" +
+        "<label class='field'>Appui long (650 ms)<select data-bind='long-press'>" +
+        LONG_PRESS_ACTIONS.map(([key,label])=>option(key,label,tile.long_press||"none")).join("") +
+        "</select></label>" +
+        "<div class='inspector-head'><strong>Condition de tuile</strong></div>" +
+        "<label class='field'>Entité de condition<input data-bind='rule-entity' list='ha-frame-entities' placeholder='sensor.temperature' value='" +
+          esc(tile.rule?.entity_id||"") + "'></label>" +
+        "<label class='field'>Opérateur<select data-bind='rule-operator'>" +
+        RULE_OPERATORS.map(([key,label])=>option(key,label,tile.rule?.operator||"above")).join("") + "</select></label>" +
+        "<label class='field'>Valeur<input data-bind='rule-value' maxlength='64' placeholder='25' value='" +
+          esc(tile.rule?.value||"") + "'></label>" +
+        "<label class='field'>Si vrai : <select data-bind='rule-hide'>" +
+        option("false","Afficher et appliquer la couleur",String(Boolean(tile.rule?.hide))) +
+        option("true","Masquer la tuile",String(Boolean(tile.rule?.hide))) +
+        "</select></label>" +
+        "<label class='field'>Couleur si vrai<input type='color' data-bind='rule-background' value='" +
+          esc(tile.rule?.background||"#ad4c43") + "'></label>" +
+        "<p class='hint'>La condition est évaluée localement sur le cadre. La place d’une tuile masquée reste réservée dans la grille.</p>" +
+        "<div class='actions'><button data-action='clear-tile-rule'>Effacer la condition</button></div>" +
         "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button>" +
         "<button data-action='copy-tile-style'>Copier le style</button>" +
         "<button data-action='paste-tile-style'" + (this._styleClipboard === null || this._styleClipboard === undefined ? " disabled" : "") +
