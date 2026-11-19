@@ -527,7 +527,7 @@ class HaFrameVisualEditor extends HTMLElement {
     if (!this._config || this._busy || !(event.ctrlKey || event.metaKey) || event.altKey) return;
     // Preserve native text undo/redo in form fields.
     if (event.target && event.target.closest &&
-        event.target.closest("input, textarea, select, [contenteditable]")) return;
+        event.target.closest("input, textarea, select, ha-icon-picker, [contenteditable]")) return;
     const key = String(event.key || "").toLowerCase();
     if (key === "z") {
       event.preventDefault();
