@@ -5,6 +5,9 @@ import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.SystemClock;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import java.security.MessageDigest;
 
 import org.json.JSONObject;
 
@@ -17,6 +20,7 @@ final class DeviceDiagnostics {
     static JSONObject snapshot(Context context) throws Exception {
         JSONObject data = new JSONObject();
         data.put("version", packageVersion(context));
+        data.put("signing_cert_sha256", signingCertificate(context));
         data.put("android_version", Build.VERSION.RELEASE);
         data.put("uptime_seconds", SystemClock.elapsedRealtime() / 1000L);
         data.put("wifi_connected", false);
@@ -65,6 +69,19 @@ final class DeviceDiagnostics {
             // Some firmware revisions restrict Wi-Fi metadata.
         }
         return data;
+    }
+
+    private static String signingCertificate(Context context) {
+        try {
+            PackageInfo info = context.getPackageManager()
+                .getPackageInfo(context.getPackageName(), PackageManager.GET_SIGNATURES);
+            if (info.signatures == null || info.signatures.length == 0) return "unknown";
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(info.signatures[0].toByteArray());
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest) hex.append(String.format(Locale.US, "%02x", b & 255));
+            return hex.toString();
+        } catch (Exception ignored) { return "unknown"; }
     }
 
     private static String packageVersion(Context context) {
