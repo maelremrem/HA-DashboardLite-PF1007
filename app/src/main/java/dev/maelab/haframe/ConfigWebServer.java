@@ -227,6 +227,7 @@ final class ConfigWebServer {
                     .put("url", config.baseUrl)
                     .put("dashboard_title", config.title)
                     .put("custom_css", config.customCss)
+                    .put("display", DisplayPrefs.load(context).toJson())
                     .put("token_set", TokenVault.hasToken(context))
                     .put("pages", config.pagesJson()), null);
             } else if ("GET".equals(req.method) && "/api/entities".equals(req.path)) {
@@ -345,6 +346,8 @@ final class ConfigWebServer {
 
     private void saveConfiguration(JSONObject body) throws Exception {
         FrameConfig config = FrameConfig.load(context);
+        DisplayPrefs display = DisplayPrefs.load(context);
+        if (body.has("display")) display.update(body.getJSONObject("display"));
         String endpoint = body.optString("url", "").trim();
         if (endpoint.length() > 255) throw new IllegalArgumentException("URL trop longue");
         config.baseUrl = endpoint;
@@ -364,6 +367,7 @@ final class ConfigWebServer {
             throw new IllegalArgumentException("Token Home Assistant manquant");
         }
         config.save(context);
+        display.save(context);
         context.sendBroadcast(new Intent(ACTION_CONFIG_UPDATED).setPackage(context.getPackageName()));
     }
 }

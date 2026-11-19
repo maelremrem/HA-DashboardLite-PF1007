@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to HA Frame",
+        "description": "Enable the Home Assistant integration on the frame, then create a 2-minute pairing code in the frame's settings.",
+        "data": {
+          "host": "Frame LAN address (e.g. 192.168.1.100)",
+          "code": "Six-digit pairing code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect, invalid/expired code, or frame integration disabled"
+    },
+    "abort": {
+      "already_configured": "This frame is already configured"
+    }
+  }
+}

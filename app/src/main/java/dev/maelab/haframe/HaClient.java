@@ -357,6 +357,32 @@ final class HaClient {
         return id;
     }
 
+    void setLevel(String entityId, int percent) {
+        if (!authenticated || entityId == null) return;
+        String domain = entityId.startsWith("light.") ? "light" :
+            entityId.startsWith("cover.") ? "cover" : "";
+        if (domain.isEmpty()) return;
+        try {
+            JSONObject data = new JSONObject().put("entity_id", entityId);
+            if ("light".equals(domain)) data.put("brightness_pct", Math.max(1, Math.min(100, percent)));
+            else data.put("position", Math.max(0, Math.min(100, percent)));
+            service(domain, "light".equals(domain) ? "turn_on" : "set_cover_position", data);
+        } catch (Exception ignored) {}
+    }
+
+    void setTemperature(String entityId, double temperature) {
+        if (!authenticated || entityId == null || !entityId.startsWith("climate.")) return;
+        try { service("climate", "set_temperature", new JSONObject()
+            .put("entity_id", entityId).put("temperature", temperature)); }
+        catch (Exception ignored) {}
+    }
+
+    private void service(String domain, String operation, JSONObject data) throws Exception {
+        if (!authenticated) return;
+        send(new JSONObject().put("type", "call_service")
+            .put("domain", domain).put("service", operation).put("service_data", data));
+    }
+
     void activate(String entityId) {
         if (!authenticated || entityId == null || entityId.isEmpty()) return;
         String[] parts = entityId.split("\\.", 2);
@@ -383,8 +409,7 @@ final class HaClient {
         }
         try {
             JSONObject target = new JSONObject().put("entity_id", entityId);
-            send(new JSONObject().put("type", "call_service")
-                .put("domain", domain).put("service", service).put("target", target));
+            service(domain, service, target);
         } catch (Exception ignored) {}
     }
 }

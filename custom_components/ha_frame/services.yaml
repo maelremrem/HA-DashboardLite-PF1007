@@ -1,0 +1,29 @@
+set_dashboard:
+  name: Set dashboard
+  description: Update the pages, CSS theme or title of the PF1007 dashboard from Home Assistant.
+  fields:
+    device_id:
+      name: Frame device ID
+      description: The device_id reported in the HA Frame status (UUID), not the Home Assistant device registry ID.
+      required: true
+      example: "12b45008-64a0-434f-95ec-2b1bbd960d13"
+      selector:
+        text:
+    dashboard_title:
+      name: Dashboard title
+      required: false
+      selector:
+        text:
+    custom_css:
+      name: Native CSS
+      required: false
+      selector:
+        text:
+          multiline: true
+    pages:
+      name: Pages (JSON array)
+      required: false
+      description: A JSON array matching the documented Page/Card schema. Omit to leave pages unchanged.
+      selector:
+        text:
+          multiline: true

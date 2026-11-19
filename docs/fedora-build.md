@@ -1,5 +1,7 @@
 # HA Frame — Fedora 44 development setup
 
+**Git checkout note:** Run build commands from the repository directory. If `./scripts/build-fedora.sh` reports `Permission denied`, use `bash scripts/build-fedora.sh` or `chmod +x scripts/build-fedora.sh`. Never run Gradle builds with `sudo`.
+
 This document covers the **verified development path** used to get the native Java project building for the PF1007. The Android frame itself stays on Android **6.0.1 / API 23**; the **Android 35 SDK** below is a *compile SDK*, not a firmware update.
 
 ## 1. Tools and Java
@@ -54,7 +56,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 export ANDROID_HOME="$HOME/Android/Sdk"
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
-./scripts/build-fedora.sh
+bash scripts/build-fedora.sh
 ```
 
 The script downloads Gradle 8.7 into `~/.cache/haframe`, verifies its official SHA-256, then builds `assembleDebug` using Android Gradle Plugin 8.6.1. The output APK is:

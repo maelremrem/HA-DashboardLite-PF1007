@@ -5,3 +5,6 @@ local.properties
 *.iml
 *.apk
 *.aab
+
+__pycache__/
+*.pyc

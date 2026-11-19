@@ -36,6 +36,10 @@ body { background-color: #ebf2f5; }
 };
 const actionDomains = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover', 'scene', 'script', 'button', 'input_button']);
 
+const CARD_TYPES = [['metric', 'Capteur'], ['control', 'Commande'], ['gauge', 'Jauge'],
+  ['thermostat', 'Thermostat'], ['light', 'Lumière / variateur'], ['cover', 'Volet / position']];
+let displaySettings = {};
+
 async function request(path, options) {
   const response = await fetch(path, {
     cache: 'no-store', credentials: 'same-origin', ...options,
@@ -80,7 +84,7 @@ function moveItem(items, index, direction) {
 }
 
 function makePage(title) { return { title, columns: 3, cards: [] }; }
-function makeCard(type) { return { type, label: '', entity_id: '' }; }
+function makeCard(type) { return { type, label: '', entity_id: '', min: 0, max: 100 }; }
 
 function validatePages(items) {
   if (!Array.isArray(items) || items.length < 1 || items.length > MAX_PAGES) throw new Error('1 à 4 pages requises');
@@ -89,7 +93,8 @@ function validatePages(items) {
     if (![2, 3, 4].includes(Number(page.columns))) throw new Error('Choisir 2, 3 ou 4 colonnes');
     if (!Array.isArray(page.cards) || page.cards.length > Math.min(MAX_CARDS, Number(page.columns) * 3)) throw new Error('3 rangées maximum : augmente le nombre de colonnes ou retire des cartes');
     for (const card of page.cards) {
-      if (!['metric', 'control'].includes(card.type)) throw new Error('Type de carte inconnu');
+      if (!['metric', 'control', 'gauge', 'thermostat', 'light', 'cover'].includes(card.type)) throw new Error('Type de carte inconnu');
+      if (!Number.isFinite(Number(card.min ?? 0)) || !Number.isFinite(Number(card.max ?? 100)) || Number(card.max ?? 100) <= Number(card.min ?? 0)) throw new Error('Plage de jauge invalide');
       if (card.label.length > 48) throw new Error('Titre de carte trop long');
       if (card.entity_id && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(card.entity_id)) throw new Error(`Entité invalide : ${card.entity_id}`);
     }
@@ -105,7 +110,16 @@ async function loadConfiguration() {
   $('tokenStatus').textContent = tokenConfigured
     ? 'Token enregistré sur le cadre : il reste inchangé si ce champ est vide.'
     : 'Aucun token enregistré. Ajoute un token Home Assistant pour connecter le cadre.';
+  displaySettings = data.display || {};
+  for (const name of ['nightEnabled', 'autoBrightness', 'timeFallback', 'screenEnabled']) {
+    const key = name.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+    $(name).checked = !!displaySettings[key];
+  }
+  for (const [id, key] of [['nightStart','night_start'], ['nightEnd','night_end'],
+    ['nightLux','night_lux'], ['brightness','brightness'], ['autoMin','auto_min'],
+    ['autoMax','auto_max'], ['luxEntityId','lux_entity_id']]) $(id).value = displaySettings[key] ?? '';
   pages = data.pages || [makePage('Maison')];
+  pages.forEach(page => page.cards.forEach(card => { card.min ??= 0; card.max ??= 100; }));
   activePage = 0;
   renderPages();
 }
@@ -133,7 +147,7 @@ function renderPages() {
   $('pageColumns').value = String(page.columns);
   const limit = Math.min(MAX_CARDS, page.columns * 3);
   $('cardCount').textContent = `${page.cards.length}/${limit} cartes`;
-  $('addMetric').disabled = $('addControl').disabled = page.cards.length >= limit;
+  for (const id of ['addMetric','addControl','addGauge','addThermostat','addLight','addCover']) $(id).disabled = page.cards.length >= limit;
   renderCards();
 }
 
@@ -167,8 +181,13 @@ function addCard(type) {
 function editCardType(index, type) {
   const card = pages[activePage].cards[index];
   card.type = type;
-  if (type === 'control' && card.entity_id && !actionDomains.has(card.entity_id.split('.')[0])) {
-    card.entity_id = '';
+  if (card.entity_id) {
+    const domain = card.entity_id.split('.')[0];
+    if ((type === 'control' && !actionDomains.has(domain)) ||
+        (type === 'thermostat' && domain !== 'climate') ||
+        (type === 'light' && domain !== 'light') || (type === 'cover' && domain !== 'cover')) {
+      card.entity_id = '';
+    }
   }
   renderCards(); changed();
 }
@@ -216,7 +235,7 @@ function renderCards() {
     const typeLabel = document.createElement('label');
     typeLabel.textContent = 'Type';
     const type = document.createElement('select');
-    for (const [value, label] of [['metric', 'Capteur'], ['control', 'Commande']]) {
+    for (const [value, label] of CARD_TYPES) {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = label;
@@ -246,6 +265,18 @@ function renderCards() {
     picker.addEventListener('click', () => openPicker(i));
     pick.append(entity, picker);
     tile.append(header, typeLabel, type, titleLabel, title, entityLabel, pick);
+    if (card.type === 'gauge') {
+      const range = document.createElement('div');
+      range.className = 'fields';
+      for (const [field, text] of [['min','Valeur minimum'], ['max','Valeur maximum']]) {
+        const wrapper = document.createElement('div');
+        const label = document.createElement('label'); label.textContent = text;
+        const input = document.createElement('input'); input.type = 'number'; input.value = card[field];
+        input.addEventListener('input', () => { card[field] = Number(input.value); changed(); });
+        wrapper.append(label, input); range.append(wrapper);
+      }
+      tile.append(range);
+    }
     grid.append(tile);
   }
 }
@@ -276,10 +307,14 @@ function openPicker(index) {
 
 function renderResults() {
   const term = normalize($('search').value);
-  const card = pages[activePage].cards[focusedCard];
+  const card = focusedCard === -2 ? {type: 'lux'} : pages[activePage].cards[focusedCard];
   if (!card) return;
   let matches = entities.filter((e) => {
     if (card.type === 'control' && !actionDomains.has(e.entity_id.split('.')[0])) return false;
+    if (card.type === 'lux' && !e.entity_id.startsWith('sensor.')) return false;
+    if (card.type === 'thermostat' && !e.entity_id.startsWith('climate.')) return false;
+    if (card.type === 'light' && !e.entity_id.startsWith('light.')) return false;
+    if (card.type === 'cover' && !e.entity_id.startsWith('cover.')) return false;
     return normalize(e.entity_id).includes(term) || normalize(e.name).includes(term);
   });
   const count = matches.length;
@@ -303,8 +338,8 @@ function renderResults() {
     id.textContent = e.entity_id;
     btn.append(name, id);
     btn.addEventListener('click', () => {
-      card.entity_id = e.entity_id;
-      if (!card.label.trim()) card.label = e.name || e.entity_id;
+      if (focusedCard === -2) $('luxEntityId').value = e.entity_id;
+      else { card.entity_id = e.entity_id; if (!card.label.trim()) card.label = e.name || e.entity_id; }
       $('picker').close();
       renderCards(); changed();
     });
@@ -316,15 +351,24 @@ async function saveConfiguration() {
   $('save').disabled = true;
   $('message').textContent = 'Enregistrement…';
   try {
+    displaySettings = {
+      night_enabled: $('nightEnabled').checked, auto_brightness: $('autoBrightness').checked,
+      time_fallback: $('timeFallback').checked, screen_enabled: $('screenEnabled').checked,
+      night_start: $('nightStart').value, night_end: $('nightEnd').value,
+      night_lux: Number($('nightLux').value), brightness: Number($('brightness').value),
+      auto_min: Number($('autoMin').value), auto_max: Number($('autoMax').value),
+      lux_entity_id: $('luxEntityId').value.trim()
+    };
     const payload = {
       url: $('url').value.trim(),
       token: $('token').value.trim(),
       dashboard_title: $('dashboardTitle').value.trim() || 'HA FRAME',
       custom_css: $('customCss').value,
+      display: displaySettings,
       pages: pages.map((page) => ({
         title: page.title.trim(), columns: Number(page.columns),
         cards: page.cards.map((card) => ({
-          type: card.type, label: card.label.trim(), entity_id: card.entity_id.trim()
+          type: card.type, label: card.label.trim(), entity_id: card.entity_id.trim(), min: card.min ?? 0, max: card.max ?? 100
         }))
       }))
     };
@@ -361,6 +405,9 @@ $('prevPage').addEventListener('click', () => movePage(-1));
 $('nextPage').addEventListener('click', () => movePage(1));
 $('addMetric').addEventListener('click', () => addCard('metric'));
 $('addControl').addEventListener('click', () => addCard('control'));
+for (const [id, type] of [['addGauge','gauge'], ['addThermostat','thermostat'],
+  ['addLight','light'], ['addCover','cover']]) $(id).addEventListener('click', () => addCard(type));
+$('pickLux').addEventListener('click', () => openPicker(-2));
 $('pageName').addEventListener('input', () => {
   pages[activePage].title = $('pageName').value;
   const nav = $('pageTabs').children[activePage];
@@ -412,7 +459,8 @@ $('cssFile').addEventListener('change', async () => {
 });
 $('closePicker').addEventListener('click', () => $('picker').close());
 $('clearEntity').addEventListener('click', () => {
-  const card = pages[activePage].cards[focusedCard];
+  const card = focusedCard === -2 ? null : pages[activePage].cards[focusedCard];
+  if (focusedCard === -2) $('luxEntityId').value = '';
   if (card) { card.entity_id = ''; changed(); }
   $('picker').close();
   renderCards();

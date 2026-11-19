@@ -1,6 +1,27 @@
-# HA Frame — PF1007 native dashboard (v0.6)
+# HA Frame — PF1007 native dashboard (v0.7)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
+
+## Install from GitHub
+
+The Android APK and the Home Assistant integration are separate installs.
+
+- **Android / Fedora:** `git clone`, switch to the v0.7 branch, then run `bash scripts/build-fedora.sh`. Avoid `sudo` for the build.
+- **Home Assistant:** the integration is under `custom_components/ha_frame/`, with `hacs.json` for Marketplace/HACS support.
+- **Important:** Home Assistant 2026.11+ Marketplace requires a **public repository** with the integration files on its default branch or a compatible release. This repository is currently **private**, and v0.7 is on a test branch, so Marketplace installation cannot work yet. Use a private Git checkout as documented until those conditions change.
+
+See [install from GitHub / Marketplace](docs/marketplace-installation.md) for both options.
+
+## V0.7 — Specialized cards, ambient light and Home Assistant integration
+
+- Native Canvas **gauge**, **thermostat**, **light dimmer**, and **cover position** cards in addition to metrics and command buttons.
+- Configurable **night blackout** with an HH:mm window + illuminance threshold, optional fallback to time-only if no lux reading exists; tap or HA wake/notify temporarily wakes the display.
+- **Auto brightness** toggle and manual slider, reading `Sensor.TYPE_LIGHT` or a selectable HA `sensor.*` entity; no physical light sensor is assumed.
+- New **opt-in HA local integration API** on port 8766 with short-lived PIN pairing. The Home Assistant custom integration lives in `custom_components/ha_frame` and provides switches, numbers, times, text config, sensors, wake button, `notify` entity and `ha_frame.set_dashboard` action.
+- The HA LLA token stays on the frame, Android Keystore-protected; no authentication credentials are committed to GitHub. Remote integration uses a distinct device token.
+- **Caution:** blanking is software black + minimum backlight setting, *not validated hardware power-off*. Device-side Android 6/API 23 runtime and Home Assistant runtime still require testing.
+
+See [Home Assistant integration](docs/home-assistant-integration.md) and [v0.7 native cards](docs/cards-v07.md).
 
 ## V0.6 — Dynamic pages and cards
 
@@ -27,7 +48,6 @@ To edit the new layout: open **Settings → Start web server** on the PF1007, th
 - [Vendor app debloat, backup and security audit](docs/debloat-security.md)
 - [Fedora 44 Android development setup](docs/fedora-build.md)
 - [CSS customization guide (native Canvas)](docs/css-theming.md)
-- [Pages and dynamic layout](docs/pages-and-layout.md)
 
 ## Changes in v0.5.0 — native CSS themes
 
@@ -65,7 +85,7 @@ See [CSS theming documentation](docs/css-theming.md) for the supported syntax, s
 
 - Removed the "PF1007 · Android 6 · WebView non utilisé" footer from the canvas dashboard.
 - Added **on-demand web configuration**, running directly inside the Android app (no LXC, Docker, or WebView on the frame).
-- Web settings allow editing the Home Assistant URL, replacing the token if needed, and configuring pages, dynamic cards and grid columns.
+- Web settings allow editing the Home Assistant URL, replacing the token if needed, and configuring all 3 sensor cards and 6 commands.
 - Home Assistant entity picker searches by `friendly_name` or `entity_id`, including accented names, using authenticated `GET /api/states`. The long-lived token is never returned to the browser.
 - The web editor only starts manually from the frame's Settings page; it binds to the current `wlan0` IPv4 address, uses a displayed one-use six-digit PIN and a short-lived session, limits failed attempts, and **shuts down automatically after 15 minutes**. Port: `8765`.
 - Existing local configuration and encrypted token remain intact when upgrading with `adb install -r` (same package ID).
@@ -108,7 +128,7 @@ Set `ANDROID_HOME` to the SDK path (or `ANDROID_SDK_ROOT`). The helper automatic
 
 ```bash
 cd HAFrame-PF1007
-./scripts/build-fedora.sh
+bash scripts/build-fedora.sh
 ```
 
 This downloads official Gradle 8.7, verifies its published SHA-256, then runs `assembleDebug`. Alternatively open the project in Android Studio and build an APK. Android Gradle Plugin 8.6.1 requires JDK 17.

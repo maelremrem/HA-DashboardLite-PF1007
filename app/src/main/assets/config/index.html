@@ -40,6 +40,23 @@
         <label for="dashboardTitle">Titre du dashboard</label>
         <input id="dashboardTitle" type="text" maxlength="28" placeholder="HA FRAME">
       </section>
+      <section class="panel displaySettings">
+        <h2>Mode nuit et luminosité</h2>
+        <div class="fields">
+          <label><input type="checkbox" id="nightEnabled"> Activer le mode nuit</label>
+          <label><input type="checkbox" id="autoBrightness"> Luminosité automatique</label>
+          <label><input type="checkbox" id="timeFallback"> Masquer à l'heure prévue sans capteur de lumière</label>
+          <label><input type="checkbox" id="screenEnabled" checked> Affichage activé</label>
+          <div><label for="nightStart">Début (HH:mm)</label><input id="nightStart" value="22:00" pattern="[0-9]{2}:[0-9]{2}"></div>
+          <div><label for="nightEnd">Fin (HH:mm)</label><input id="nightEnd" value="07:00" pattern="[0-9]{2}:[0-9]{2}"></div>
+          <div><label for="nightLux">Seuil nocturne (lux)</label><input id="nightLux" type="number" min="0" max="10000" value="5"></div>
+          <div><label for="brightness">Luminosité manuelle (%)</label><input id="brightness" type="number" min="1" max="100" value="75"></div>
+          <div><label for="autoMin">Minimum automatique (%)</label><input id="autoMin" type="number" min="1" max="100" value="10"></div>
+          <div><label for="autoMax">Maximum automatique (%)</label><input id="autoMax" type="number" min="1" max="100" value="100"></div>
+          <div><label for="luxEntityId">Entité illuminance HA (facultative)</label><div class="pick"><input id="luxEntityId" placeholder="sensor.illuminance" spellcheck="false"><button id="pickLux" type="button">Chercher</button></div></div>
+        </div>
+        <p class="muted">Sans capteur physique ni entité illuminance, le mode nuit ne s'active que si le mode horaire de secours est coché. Le cadre est masqué en noir et atténué, pas éteint matériellement.</p>
+      </section>
       <section class="panel themePanel">
         <h2>Personnaliser avec du CSS</h2>
         <p class="muted">Le cadre utilise Android Canvas : ce CSS est interprété nativement (couleurs, typographie, arrondis). Ce n'est pas un moteur CSS complet.</p>
@@ -74,7 +91,7 @@
         <div class="pageActions"><button id="prevPage" type="button" class="quiet">← Déplacer la page</button><button id="nextPage" type="button" class="quiet">Déplacer la page →</button><button id="removePage" type="button" class="danger">Supprimer la page</button></div>
       </section>
       <section class="blocks">
-        <div class="layoutHeading"><h2>Cartes <span id="cardCount">0/12 cartes</span></h2><div class="pageActions"><button id="addMetric" type="button">+ Capteur</button><button id="addControl" type="button">+ Commande</button></div></div>
+        <div class="layoutHeading"><h2>Cartes <span id="cardCount">0/12 cartes</span></h2><div class="pageActions"><button id="addMetric" type="button">+ Capteur</button><button id="addControl" type="button">+ Commande</button><button id="addGauge" type="button">+ Jauge</button><button id="addThermostat" type="button">+ Thermostat</button><button id="addLight" type="button">+ Lumière</button><button id="addCover" type="button">+ Volet</button></div></div>
         <div id="cards" class="tileGrid"></div>
       </section>
       <div class="bottom"><span id="message" aria-live="polite">Modifie les pages et cartes, puis enregistre pour appliquer sur le cadre.</span><div><button id="reloadEntities" type="button" class="quiet">Actualiser les entités</button><button id="save" type="button" class="primary">Enregistrer la configuration</button><button id="end" type="button" class="quiet">Terminer</button></div></div>
