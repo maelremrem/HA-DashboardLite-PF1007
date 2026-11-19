@@ -45,8 +45,8 @@ def _entry_coordinator(hass, entry_id):
     return hass.data.get(DOMAIN, {}).get(entry_id)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "ha_frame/editor/list"})
 @websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "ha_frame/editor/list"})
 @websocket_api.async_response
 async def editor_list(hass, connection, msg):
     """List only paired frames; never expose bearer tokens to browsers."""
@@ -63,11 +63,11 @@ async def editor_list(hass, connection, msg):
     connection.send_result(msg["id"], {"frames": sorted(frames, key=lambda frame: frame["name"])})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): "ha_frame/editor/get",
     vol.Required("entry_id"): str,
 })
-@websocket_api.require_admin
 @websocket_api.async_response
 async def editor_get(hass, connection, msg):
     """Read the layout directly from one selected frame."""
@@ -89,13 +89,13 @@ async def editor_get(hass, connection, msg):
     connection.send_result(msg["id"], {"config": safe, "revision": layout_revision(safe)})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): "ha_frame/editor/save",
     vol.Required("entry_id"): str,
     vol.Required("revision"): str,
     vol.Required("config"): dict,
 })
-@websocket_api.require_admin
 @websocket_api.async_response
 async def editor_save(hass, connection, msg):
     """Validate and save atomically for the selected frame; block stale edits."""
