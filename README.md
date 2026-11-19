@@ -32,7 +32,7 @@ See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
 - Security: the three editor WebSocket endpoints are admin-only and expose no device credentials.
 - Reliability: the editor checks configuration revisions before saving, preventing silent overwrites.
-- Deployment: integration **v1.0.0** only, compatible with Android APK **v0.9.0**, resource added automatically on HA Lovelace storage dashboards.
+- Deployment: integration **v1.0.1** only, compatible with Android APK **v0.9.0**, resource added automatically on HA Lovelace storage dashboards (registration fixed in v1.0.1).
 - If you run dashboards in YAML resource mode, add `/ha-frame/ha-frame-editor.js?v=1.0.0` as a module once.
 
 [Visual Studio guide](docs/visual-studio.md) · Lovelace YAML: `type: custom:ha-frame-visual-editor`.
