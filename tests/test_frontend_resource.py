@@ -21,7 +21,8 @@ scope = {
     "Path": Path,
     "StaticPathConfig": lambda url, path, cache: (url, path, cache),
     "RESOURCE_PATH": "/ha-frame/ha-frame-editor.js",
-    "RESOURCE_VERSION": "1.0.0",
+    "PANEL_RESOURCE_PATH": "/ha-frame/ha-frame-studio-panel.js",
+    "RESOURCE_VERSION": "1.1.0",
     "_LOGGER": Mock(),
 }
 exec(compile(ast.Module(body=[register_node], type_ignores=[]), str(FRONTEND), "exec"), scope)
@@ -69,10 +70,15 @@ class FrontendResourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resources.load_count, 1)
         self.assertEqual(resources.created, [{
             "res_type": "module",
-            "url": "/ha-frame/ha-frame-editor.js?v=1.0.0",
+            "url": "/ha-frame/ha-frame-editor.js?v=1.1.0",
         }])
         self.assertEqual(resources.updated, [])
         hass.http.async_register_static_paths.assert_awaited_once()
+        paths = hass.http.async_register_static_paths.call_args.args[0]
+        self.assertEqual({item[0] for item in paths}, {
+            "/ha-frame/ha-frame-editor.js",
+            "/ha-frame/ha-frame-studio-panel.js",
+        })
 
     async def test_updates_existing_resource_instead_of_creating_duplicate(self):
         hass, resources = self.make_hass(items=[{
@@ -84,7 +90,7 @@ class FrontendResourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resources.created, [])
         self.assertEqual(resources.updated, [("existing", {
             "res_type": "module",
-            "url": "/ha-frame/ha-frame-editor.js?v=1.0.0",
+            "url": "/ha-frame/ha-frame-editor.js?v=1.1.0",
         })])
 
     async def test_yaml_resource_mode_only_serves_file(self):
