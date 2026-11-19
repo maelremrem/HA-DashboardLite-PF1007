@@ -26,16 +26,16 @@ This release changes **only the HA integration**. The existing Android **v0.7 AP
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
-## V1.0 — Home Assistant visual editor and multiple frames
+## V1.1 — HA Frame Studio sidebar and multiple frames
 
-**HA Frame · Studio** is a new Lovelace card bundled with the Home Assistant integration. Choose any paired PF1007 frame, see a live-state **1280×800 layout preview**, click tiles to edit properties, drag and drop to reorder, change the native CSS or theme, and save explicitly. Each frame has a separate configuration stored on that frame; no shared global layout is used.
+**HA Frame Studio** now opens directly from the **Home Assistant sidebar** at `/ha-frame-studio`, with no manual Lovelace card or resource. It reuses the full visual editor: choose a paired PF1007 frame, see its **1280×800 preview**, click and rearrange tiles, customize pages, themes and native CSS, then save to that frame. Every frame has its own configuration.
 
-- Security: the three editor WebSocket endpoints are admin-only and expose no device credentials.
-- Reliability: the editor checks configuration revisions before saving, preventing silent overwrites.
-- Deployment: integration **v1.0.0** only, compatible with Android APK **v0.9.0**, resource added automatically on HA Lovelace storage dashboards.
-- If you run dashboards in YAML resource mode, add `/ha-frame/ha-frame-editor.js?v=1.0.0` as a module once.
+- Security: the sidebar and editor WebSocket commands are restricted to administrators; no device tokens are sent to browsers.
+- Reliability: edits require an explicit save, and revision checks prevent overwriting changes made elsewhere.
+- Deployment: integration **v1.1.0**, compatible with Android APK **v0.9.0**, no Android update or re-pairing.
+- Compatibility: the optional legacy Lovelace card `type: custom:ha-frame-visual-editor` still works. In YAML resource mode only, it needs `/ha-frame/ha-frame-editor.js?v=1.1.0` added as a module.
 
-[Visual Studio guide](docs/visual-studio.md) · Lovelace YAML: `type: custom:ha-frame-visual-editor`.
+[HA Frame Studio setup guide](docs/visual-studio.md).
 
 ## V0.9 — Android device diagnostics
 
