@@ -407,6 +407,13 @@ class HaFrameVisualEditor extends HTMLElement {
     this._notice = "";
     this._error = false;
     this._drag = -1;
+    this._history = [];
+    this._historyIndex = -1;
+    this._savedSnapshot = "";
+    this._historyGroup = "";
+    this._historyGroupAt = 0;
+    this._styleClipboard = null;
+    this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
     this.shadowRoot.addEventListener("input", (event) => this._input(event));
     this.shadowRoot.addEventListener("change", (event) => this._change(event));
@@ -448,11 +455,82 @@ class HaFrameVisualEditor extends HTMLElement {
     const node = this.shadowRoot.querySelector("[data-notice]");
     if (node) { node.textContent = this._notice; node.className = "status" + (this._error ? " error" : ""); }
   }
-  _mark() {
-    this._dirty = true;
-    this._message("Modifications non enregistrées", false);
+  _checkpoint() {
+    return {
+      json: JSON.stringify(this._config),
+      page: this._page, tile: this._tile, panel: this._panel
+    };
+  }
+  _resetHistory() {
+    this._history = [this._checkpoint()];
+    this._historyIndex = 0;
+    this._savedSnapshot = this._history[0].json;
+    this._historyGroup = "";
+    this._historyGroupAt = 0;
+    this._dirty = false;
+  }
+  _syncEditState() {
+    this._dirty = JSON.stringify(this._config) !== this._savedSnapshot;
+    this._message(this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre", false);
     const save = this.shadowRoot.querySelector("[data-action='save']");
-    if (save) save.disabled = false;
+    const undo = this.shadowRoot.querySelector("[data-action='undo']");
+    const redo = this.shadowRoot.querySelector("[data-action='redo']");
+    if (save) save.disabled = !this._dirty || this._busy;
+    if (undo) undo.disabled = this._historyIndex <= 0 || this._busy;
+    if (redo) redo.disabled = this._historyIndex >= this._history.length - 1 || this._busy;
+  }
+  _mark(group = "") {
+    if (!this._config) return;
+    if (!this._history.length) this._resetHistory();
+    const next = this._checkpoint();
+    const current = this._history[this._historyIndex];
+    if (next.json !== current.json) {
+      const now = Date.now();
+      // Coalesce fast typing into a single undo step, not unrelated actions.
+      const grouped = group && group === this._historyGroup &&
+        now - this._historyGroupAt < 750 &&
+        this._historyIndex > 0 && this._historyIndex === this._history.length - 1;
+      if (grouped) {
+        this._history[this._historyIndex] = next;
+      } else {
+        this._history.splice(this._historyIndex + 1);
+        this._history.push(next);
+        if (this._history.length > 51) this._history.shift();
+        this._historyIndex = this._history.length - 1;
+      }
+      this._historyGroup = group;
+      this._historyGroupAt = now;
+    }
+    this._syncEditState();
+  }
+  _stepHistory(delta) {
+    const next = this._historyIndex + delta;
+    if (!this._config || this._busy || next < 0 || next >= this._history.length) return;
+    const snapshot = this._history[next];
+    this._historyIndex = next;
+    this._historyGroup = "";
+    this._config = JSON.parse(snapshot.json);
+    this._page = Math.min(snapshot.page, this._config.pages.length - 1);
+    this._tile = Math.min(snapshot.tile, this._config.pages[this._page].cards.length - 1);
+    this._panel = snapshot.panel;
+    this._dirty = snapshot.json !== this._savedSnapshot;
+    this._notice = this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre";
+    this._error = false;
+    this._render();
+  }
+  _shortcut(event) {
+    if (!this._config || this._busy || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+    // Preserve native text undo/redo in form fields.
+    if (event.target && event.target.closest &&
+        event.target.closest("input, textarea, select, [contenteditable]")) return;
+    const key = String(event.key || "").toLowerCase();
+    if (key === "z") {
+      event.preventDefault();
+      this._stepHistory(event.shiftKey ? 1 : -1);
+    } else if (key === "y" && !event.shiftKey) {
+      event.preventDefault();
+      this._stepHistory(1);
+    }
   }
   async _bootstrap() {
     if (this._loading || !this._hass) return;
@@ -483,7 +561,7 @@ class HaFrameVisualEditor extends HTMLElement {
       this._page = 0;
       this._tile = -1;
       this._panel = "tile";
-      this._dirty = false;
+      this._resetHistory();
       this._message("", false);
       this._render();
     } catch (error) {
@@ -897,7 +975,9 @@ class HaFrameVisualEditor extends HTMLElement {
         if (!Object.keys(style).length) delete tile.style;
       }
     }
-    this._mark();
+    const typing = target.tagName === "TEXTAREA" ||
+      (target.tagName === "INPUT" && ["text", "search", "url"].includes(target.type));
+    this._mark(typing ? "typing:" + this._page + ":" + this._tile + ":" + bind : "");
     this._preview();
   }
   _applyPreset(id) {
@@ -1057,7 +1137,7 @@ class HaFrameVisualEditor extends HTMLElement {
       });
       this._config = prepared;
       this._revision = response.revision;
-      this._dirty = false;
+      this._resetHistory();
       this._message("Enregistré sur le cadre sélectionné", false);
       this._render();
     } catch (error) {
@@ -1071,6 +1151,8 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     const page = this._pageObject(), tile = this._tileObject();
     if (action === "save") return this._save();
+    if (action === "undo") return this._stepHistory(-1);
+    if (action === "redo") return this._stepHistory(1);
     if (action === "reload" || action === "discard") {
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
       return this._open();
