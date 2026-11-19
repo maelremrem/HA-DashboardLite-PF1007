@@ -25,7 +25,7 @@ scope = {
     "panel_custom": SimpleNamespace(async_register_panel=register_panel),
     "PANEL_URL_PATH": "ha-frame-studio",
     "PANEL_RESOURCE_PATH": "/ha-frame/ha-frame-studio-panel.js",
-    "RESOURCE_VERSION": "1.2.0",
+    "RESOURCE_VERSION": "1.3.0",
 }
 exec(compile(ast.Module(body=[node], type_ignores=[]), str(FRONTEND), "exec"), scope)
 
@@ -46,7 +46,7 @@ class SidebarPanelTests(unittest.IsolatedAsyncioTestCase):
             webcomponent_name="ha-frame-studio-panel",
             sidebar_title="HA Frame Studio",
             sidebar_icon="mdi:monitor-dashboard",
-            module_url="/ha-frame/ha-frame-studio-panel.js?v=1.2.0",
+            module_url="/ha-frame/ha-frame-studio-panel.js?v=1.3.0",
             require_admin=True,
             embed_iframe=False,
         )
