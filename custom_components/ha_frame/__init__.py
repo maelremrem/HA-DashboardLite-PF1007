@@ -14,6 +14,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import FrameApi, FrameApiError
 from .const import DOMAIN, PLATFORMS
+from .editor_ws import async_register_editor_commands
+from .frontend_resource import async_register_editor_frontend
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +42,8 @@ class FrameCoordinator(DataUpdateCoordinator):
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    async_register_editor_commands(hass)
+    hass.async_create_task(async_register_editor_frontend(hass))
 
     async def set_dashboard(call: ServiceCall) -> None:
         device_id = call.data["device_id"]
