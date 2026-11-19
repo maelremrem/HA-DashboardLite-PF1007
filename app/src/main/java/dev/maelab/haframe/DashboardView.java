@@ -65,6 +65,33 @@ final class DashboardView extends View {
     private String fullscreenCamera = "";
     private long manualPageUntil;
     private long pressedAt;
+    private final PhotoSlideshow photos;
+    private boolean photoActive;
+    private long lastInteraction = SystemClock.elapsedRealtime();
+    private long lastPhotoAt;
+    private final Runnable slideshowTick = new Runnable() {
+        @Override public void run() {
+            if (!sleeping && config.slideshow.optBoolean("enabled", false)) {
+                long now = SystemClock.elapsedRealtime();
+                if (now - lastInteraction >= config.slideshow.optInt("idle_seconds",300)*1000L) {
+                    if (!photoActive) {
+                        photoActive = true;
+                        refreshCamera();
+                    }
+                    if (now - lastPhotoAt >= config.slideshow.optInt("interval_seconds",30)*1000L) {
+                        lastPhotoAt = now;
+                        if ("local".equals(config.slideshow.optString("source","local"))) photos.advance();
+                    }
+                    invalidate();
+                }
+            } else if (photoActive) {
+                photoActive = false;
+                refreshCamera();
+                invalidate();
+            }
+            postDelayed(this,5000L);
+        }
+    };
     private float startX;
     private float startY;
     private String lastCommandId = "";
@@ -78,13 +105,20 @@ final class DashboardView extends View {
         }
     };
 
-    DashboardView(Context context) { super(context); }
+    DashboardView(Context context) {
+        super(context);
+        photos = new PhotoSlideshow(context, new Runnable() {
+            @Override public void run() { invalidate(); }
+        });
+    }
     void setCallbacks(Callbacks callbacks) { this.callbacks = callbacks; }
     void setConfig(FrameConfig config) {
         this.config = config;
         pageIndex = Math.max(0, Math.min(pageIndex, config.pages.size() - 1));
         touchedCard = -1;
         feedbackCard = -1;
+        photoActive = false;
+        lastInteraction = SystemClock.elapsedRealtime();
         try { theme = CanvasTheme.parse(config.customCss); }
         catch (IllegalArgumentException ignored) { theme = CanvasTheme.parse(""); }
         refreshCamera();
@@ -114,6 +148,9 @@ final class DashboardView extends View {
     }
 
     void showNotification(String title, String message, int seconds) {
+        photoActive = false;
+        lastInteraction = SystemClock.elapsedRealtime();
+        refreshCamera();
         notificationTitle = title;
         notificationMessage = message;
         notificationUntil = SystemClock.elapsedRealtime() + seconds * 1000L;
@@ -134,6 +171,11 @@ final class DashboardView extends View {
             client.selectCamera(fullscreenCamera);
             return;
         }
+        if (!sleeping && photoActive &&
+            "camera".equals(config.slideshow.optString("source"))) {
+            client.selectCamera(config.slideshow.optString("camera_entity", ""));
+            return;
+        }
         if (!sleeping && !config.pages.isEmpty()) {
             FrameConfig.Page page = config.pages.get(pageIndex);
             for (FrameConfig.Card card : page.cards) {
@@ -149,10 +191,13 @@ final class DashboardView extends View {
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         refreshClock.run();
+        slideshowTick.run();
         refreshCamera();
     }
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(refreshClock);
+        removeCallbacks(slideshowTick);
+        photos.stop();
         if (client != null) client.selectCamera("");
         removeCallbacks(endFeedback);
         removeCallbacks(endNotification);
@@ -187,6 +232,15 @@ final class DashboardView extends View {
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (sleeping) { canvas.drawColor(0xFF000000); return; }
+        if (photoActive) {
+            Bitmap image = "camera".equals(config.slideshow.optString("source")) ?
+                (client == null ? null : client.cameraFrame(config.slideshow.optString("camera_entity",""))) :
+                photos.image();
+            if (image != null && !image.isRecycled()) {
+                drawSlideshow(canvas, image);
+                return;
+            }
+        }
         if (!fullscreenCamera.isEmpty()) {
             drawCameraFullscreen(canvas);
             return;
@@ -223,6 +277,22 @@ final class DashboardView extends View {
         }
         if (notificationUntil > SystemClock.elapsedRealtime()) drawNotification(canvas);
         canvas.restore();
+    }
+
+    private void drawSlideshow(Canvas canvas, Bitmap picture) {
+        canvas.drawColor(0xFF030609);
+        float factor = Math.min(getWidth()/(float)picture.getWidth(),
+            getHeight()/(float)picture.getHeight());
+        float w=picture.getWidth()*factor, h=picture.getHeight()*factor;
+        paint.setColor(0xFFFFFFFF);
+        paint.setFilterBitmap(true);
+        canvas.drawBitmap(picture,null,new RectF(
+            (getWidth()-w)/2f,(getHeight()-h)/2f,
+            (getWidth()+w)/2f,(getHeight()+h)/2f),paint);
+        if (config.slideshow.optBoolean("show_clock",true)) {
+            rect(canvas,16,16,142,56,11,0x99000000);
+            text(canvas,clock.format(new Date()),28,55,32,0xFFFFFFFF,true,118);
+        }
     }
 
     private void drawCameraFullscreen(Canvas canvas) {
@@ -572,6 +642,17 @@ final class DashboardView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
+        if (photoActive) {
+            if (event.getActionMasked()==MotionEvent.ACTION_UP) {
+                photoActive=false;
+                lastInteraction=SystemClock.elapsedRealtime();
+                refreshCamera();
+                invalidate();
+            }
+            return true;
+        }
+        if (event.getActionMasked()==MotionEvent.ACTION_DOWN)
+            lastInteraction=SystemClock.elapsedRealtime();
         if (!fullscreenCamera.isEmpty()) {
             if (event.getActionMasked() == MotionEvent.ACTION_UP) {
                 fullscreenCamera = "";
