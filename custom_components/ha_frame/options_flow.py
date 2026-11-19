@@ -9,7 +9,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FrameApi, FrameApiError
-from .dashboard_editor import CARD_TYPES, PRESETS, move, new_card, validate_pages
+from .dashboard_editor import PRESETS, move, new_card, validate_pages
 
 
 class FrameOptionsFlow(config_entries.OptionsFlow):
@@ -100,7 +100,7 @@ class FrameOptionsFlow(config_entries.OptionsFlow):
     async def async_step_css(self, user_input=None):
         errors = {}
         if user_input is not None:
-            css = user_input["custom_css"]
+            css = user_input.get("custom_css", "")
             if len(css) > 12000:
                 errors["base"] = "invalid_config"
             else:
@@ -109,7 +109,7 @@ class FrameOptionsFlow(config_entries.OptionsFlow):
                     return await self.async_step_init()
                 errors["base"] = error
         return self.async_show_form(step_id="css", errors=errors, data_schema=vol.Schema({
-            vol.Required("custom_css", default=self.snapshot.get("custom_css", "")):
+            vol.Optional("custom_css", default=self.snapshot.get("custom_css", "")):
                 selector.TextSelector(selector.TextSelectorConfig(multiline=True))
         }))
 
@@ -219,7 +219,8 @@ class FrameOptionsFlow(config_entries.OptionsFlow):
                 ("thermostat", "Thermostat"), ("light", "Light"), ("cover", "Cover")
             ]),
             vol.Required("label", default=card["label"]): selector.TextSelector(),
-            vol.Optional("entity_id", default=card["entity_id"]): selector.EntitySelector(),
+            (vol.Optional("entity_id", default=card["entity_id"]) if card["entity_id"]
+             else vol.Optional("entity_id")): selector.EntitySelector(),
             vol.Optional("clear_entity", default=False): bool,
             vol.Required("min", default=card.get("min", 0)): vol.Coerce(float),
             vol.Required("max", default=card.get("max", 100)): vol.Coerce(float),
