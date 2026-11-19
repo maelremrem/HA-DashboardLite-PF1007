@@ -26,7 +26,7 @@ jobs:
           python -m json.tool custom_components/ha_frame/translations/en.json > /dev/null
           python -m json.tool custom_components/ha_frame/translations/fr.json > /dev/null
       - name: Run dashboard editor tests
-        run: python -m unittest discover -s tests -p 'test_dashboard_editor.py' -v
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Check web editor JavaScript
         run: node --check app/src/main/assets/config/app.js
 
