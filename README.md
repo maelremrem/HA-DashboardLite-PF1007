@@ -10,6 +10,19 @@ A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the P
 - [Vendor app debloat, backup and security audit](docs/debloat-security.md)
 - [Fedora 44 Android development setup](docs/fedora-build.md)
 
+## Changes in v0.4.0 — touch and reliability
+
+- **Faster redraws:** incoming Home Assistant state bursts are coalesced into one native Canvas redraw every ~80 ms, rather than invalidating for every network message.
+- **Safer touch actions:** tiles visibly react while pressed, give haptic feedback when available, and suppress duplicate commands to the same entity within 700 ms. A swipe crossing a tile boundary does not send an action.
+- **Honest offline state:** stale cached values are labelled as offline rather than presented as live; the controls are visually inactive when disconnected.
+- **Manual reconnect:** tap the top connection-status area to immediately retry if disconnected; normal capped automatic reconnect remains enabled.
+- **Web editor reorder:** up/down arrows reorder the 3 sensor and 6 command cards *within their groups*. Saving applies the new order immediately to the frame. Existing entity IDs, labels and encrypted token remain unchanged on upgrade.
+- **Browser tests:** run `node tests/web-config.test.cjs` to validate reordering boundaries and slot preservation (Node.js optional, only for tests).
+
+**Upgrade:** `adb install -r app/build/outputs/apk/debug/app-debug.apk`. Keep `dev.maelab.haframe` installed (do not uninstall) to preserve your saved settings and token.
+
+**Validation:** browser source syntax and reordering tests are checked. The Android APK still needs building and a hardware touch/reconnect test on the PF1007.
+
 ## Changes in v0.3.0 (bug fixes)
 
 - Fixed the dashboard clock: the previous partial redraw covered y=0–135 while the clock was drawn around y=171. The view now invalidates at each wall-clock minute boundary and handles date changes.

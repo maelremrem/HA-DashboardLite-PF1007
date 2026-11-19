@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -41,6 +42,11 @@ final class HaClient {
         .build();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicInteger sequence = new AtomicInteger(1);
+    private final AtomicBoolean redrawPending = new AtomicBoolean(false);
+    private final Runnable redraw = () -> {
+        redrawPending.set(false);
+        if (!stopped) listener.onStatesChanged();
+    };
     private final Map<String, EntityState> states = new ConcurrentHashMap<>();
     private final Listener listener;
     private final String endpoint;
@@ -54,6 +60,8 @@ final class HaClient {
     private int getStatesId = -1;
     private int fallbackSubscriptionId = -1;
     private volatile boolean receivedStateSnapshot = false;
+    private String lastStatusMessage = null;
+    private boolean lastStatusConnected = false;
     private final Runnable reconnect = this::connect;
     private final Runnable snapshotFallback = () -> {
         if (!stopped && authenticated && !receivedStateSnapshot && getStatesId == -1 && entities.length > 0) {
@@ -101,6 +109,8 @@ final class HaClient {
         authenticated = false;
         main.removeCallbacks(reconnect);
         main.removeCallbacks(snapshotFallback);
+        main.removeCallbacks(redraw);
+        redrawPending.set(false);
         WebSocket previous = socket;
         socket = null;
         if (previous != null) previous.close(1000, "Dashboard paused");
@@ -109,11 +119,26 @@ final class HaClient {
     }
 
     private void status(String message, boolean connected) {
+        // State bursts usually keep the same N/M counter; avoid redundant full redraws.
+        if (message.equals(lastStatusMessage) && connected == lastStatusConnected) return;
+        lastStatusMessage = message;
+        lastStatusConnected = connected;
         main.post(() -> { if (!stopped) listener.onStatus(message, connected); });
     }
 
     private void changed() {
-        main.post(() -> { if (!stopped) listener.onStatesChanged(); });
+        // Batch bursts of entity updates into one screen redraw.
+        if (redrawPending.compareAndSet(false, true)) main.postDelayed(redraw, 80L);
+    }
+
+    void retryNow() {
+        if (stopped || authenticated) return;
+        main.removeCallbacks(reconnect);
+        WebSocket previous = socket;
+        socket = null;
+        if (previous != null) previous.cancel();
+        failures = 0;
+        connect();
     }
 
     private void connect() {
@@ -125,6 +150,9 @@ final class HaClient {
         fallbackSubscriptionId = -1;
         main.removeCallbacks(snapshotFallback);
         status("Connexion à Home Assistant…", false);
+        WebSocket previous = socket;
+        socket = null;
+        if (previous != null) previous.cancel();
         Request request = new Request.Builder().url(endpoint).build();
         socket = client.newWebSocket(request, new WebSocketListener() {
             @Override public void onMessage(WebSocket webSocket, String text) {

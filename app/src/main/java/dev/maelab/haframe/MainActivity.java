@@ -32,6 +32,10 @@ public final class MainActivity extends Activity implements HaClient.Listener {
             @Override public void settings() {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
             }
+            @Override public void retryConnection() {
+                if (ha != null) ha.retryNow();
+                else startActivity(new Intent(MainActivity.this, SettingsActivity.class));
+            }
             @Override public void command(String entityId) {
                 if (ha != null && ha.isConnected()) ha.activate(entityId);
                 else Toast.makeText(MainActivity.this, "Home Assistant hors ligne", Toast.LENGTH_SHORT).show();

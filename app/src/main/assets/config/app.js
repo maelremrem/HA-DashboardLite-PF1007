@@ -62,6 +62,21 @@ async function loadConfiguration() {
   renderSlots();
 }
 
+function reorderSlots(items, index, direction) {
+  const start = index < 3 ? 0 : 3;
+  const end = index < 3 ? 3 : 9;
+  const target = index + direction;
+  if (index < start || index >= end || target < start || target >= end) return false;
+  [items[index], items[target]] = [items[target], items[index]];
+  return true;
+}
+
+function moveSlot(index, direction) {
+  if (!reorderSlots(slots, index, direction)) return;
+  renderSlots();
+  $('message').textContent = 'Ordre modifié — enregistre pour appliquer au cadre.';
+}
+
 function renderSlots() {
   for (const [containerId, start, end] of [['metrics', 0, 3], ['controls', 3, 9]]) {
     const container = $(containerId);
@@ -71,6 +86,21 @@ function renderSlots() {
       tile.className = 'tile';
       const heading = document.createElement('h3');
       heading.textContent = `${i < 3 ? 'Capteur' : 'Commande'} ${i < 3 ? i + 1 : i - 2}`;
+      const header = document.createElement('div');
+      header.className = 'tileHeader';
+      const reorder = document.createElement('div');
+      reorder.className = 'reorder';
+      for (const direction of [-1, 1]) {
+        const move = document.createElement('button');
+        move.type = 'button';
+        move.textContent = direction < 0 ? '↑' : '↓';
+        move.title = direction < 0 ? 'Déplacer à gauche / avant' : 'Déplacer à droite / après';
+        move.setAttribute('aria-label', move.title);
+        move.disabled = direction < 0 ? i === start : i === end - 1;
+        move.addEventListener('click', () => moveSlot(i, direction));
+        reorder.append(move);
+      }
+      header.append(heading, reorder);
       const nameLabel = document.createElement('label');
       nameLabel.textContent = 'Titre de la carte';
       const label = document.createElement('input');
@@ -95,7 +125,7 @@ function renderSlots() {
       const info = document.createElement('div');
       info.className = 'hint';
       info.textContent = i < 3 ? 'Valeur et unité actualisées en direct' : 'Action au toucher, selon le type d’entité';
-      tile.append(heading, nameLabel, label, entityLabel, pick, info);
+      tile.append(header, nameLabel, label, entityLabel, pick, info);
       container.append(tile);
     }
   }
@@ -180,8 +210,7 @@ async function saveConfiguration() {
     $('token').value = '';
     tokenConfigured = true;
     $('tokenStatus').textContent = 'Token conservé et non renvoyé dans le navigateur.';
-    $('message').textContent = 'Configuration enregistrée. Reviens au dashboard sur le cadre pour appliquer.';
-    await loadEntities();
+    $('message').textContent = 'Configuration enregistrée et appliquée sur le cadre.';
   } catch (e) {
     $('message').textContent = `Erreur : ${e.message}`;
   } finally { $('save').disabled = false; }
