@@ -445,21 +445,47 @@ class HaFrameVisualEditor extends HTMLElement {
         esc(this._config.custom_css) + "</textarea></div>" +
         "<p class='hint'>Couleurs, tailles, poids et arrondis sont prévisualisés. Le rendu Android reste la référence et valide le CSS à l’enregistrement.</p>";
     } else if (this._panel === "appearance") {
-      const selected = Object.entries(PRESETS).find(([,css])=>css===this._config.custom_css);
-      html = "<div class='inspector-head'><strong>Apparence</strong></div>" +
+      const selectedCss = removeDesign(this._config.custom_css);
+      const selected = Object.entries(PRESETS).find(([,css]) => css === selectedCss);
+      const selectedId = selected ? selected[0] : "custom";
+      const gallery = Object.keys(PRESETS).map((id) => {
+        const p = THEME_SWATCHES[id] || PALETTE_THEMES[id];
+        const active = selectedId === id;
+        return "<button type='button' class='theme-choice" + (active ? " active" : "") +
+          "' data-preset='" + esc(id) + "' aria-pressed='" + active + "'>" +
+          "<div class='theme-sample' style='--sample-bg:" + p.bg + ";--sample-card:" +
+          p.card + ";--sample-text:" + p.text + ";--sample-accent:" + p.accent +
+          "'><i></i><i></i><i></i></div><span>" + esc(THEME_LABELS[id]) + "</span></button>";
+      }).join("");
+      html = "<div class='inspector-head'><strong>Galerie de thèmes</strong></div>" +
         "<label class='field'>Titre du cadre<input data-bind='title' maxlength='28' value='" +
         esc(this._config.dashboard_title) + "'></label>" +
-        "<label class='field'>Thème<select data-bind='preset'>" +
-        option("custom","Personnalisé",selected ? selected[0]:"custom") +
-        Object.keys(PRESETS).map(k=>option(k,({original:"Original",ocean:"Océan",amber:"Ambre",light:"Clair"})[k],
-          selected ? selected[0]:"custom")).join("") + "</select></label>" +
-        "<p class='hint'>Un thème prédéfini remplace le CSS actuel. Personnalise-le ensuite dans l’onglet CSS.</p>";
+        "<p class='section-hint'>Choisis un thème pour prévisualiser les couleurs avant d’enregistrer.</p>" +
+        "<div class='theme-gallery'>" + gallery + "</div>" +
+        (selectedId === "custom" ? "<p class='section-hint'>CSS personnalisé actuellement actif.</p>" : "") +
+        "<label class='field'>Design des tuiles<select data-bind='shape'>" +
+        Object.entries(SHAPES).map(([id,p])=>option(id,p.label,readShape(this._config.custom_css))).join("") +
+        "</select></label>" +
+        "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
+    } else if (this._panel === "layouts") {
+      html = "<div class='inspector-head'><strong>Modèles de disposition</strong></div>" +
+        "<p class='hint'>Ajoute une page ou remplace la page actuelle. Les tuiles sont pré-remplies sans entités : associe-les ensuite à Home Assistant.</p>" +
+        "<div class='layout-gallery'>" + LAYOUT_TEMPLATES.map(t => {
+          const thumb = "<div class='layout-thumb' style='grid-template-columns:repeat(" + t.columns +
+            ",1fr)'>" + t.tiles.map(()=>"<i></i>").join("") + "</div>";
+          return "<div class='layout-choice'><strong>" + esc(t.name) + "</strong>" +
+            "<div class='muted'>" + t.columns + " colonnes · " + t.tiles.length + " tuiles</div>" +
+            thumb + "<div class='actions'><button class='btn-small' data-layout='" + t.id +
+            "' data-mode='add'>+ Page</button><button class='btn-small' data-layout='" + t.id +
+            "' data-mode='replace'>Remplacer</button></div></div>";
+        }).join("") + "</div>";
     } else if (this._panel === "page" || !tile) {
       html = "<div class='inspector-head'><strong>Page " + esc(this._page + 1) + "</strong></div>" +
         "<label class='field'>Nom<input data-bind='page-title' maxlength='32' value='" + esc(page.title) + "'></label>" +
         "<label class='field'>Colonnes<select data-bind='columns'>" + [2,3,4].map(n=>option(n,n+" colonnes",page.columns)).join("") +
         "</select></label><p class='hint'>Entre 1 et 4 pages, jusqu’à 3 rangées par page. Les cartes peuvent être déplacées en les faisant glisser.</p>" +
         "<div class='actions'><button data-action='page-left'>← Page</button><button data-action='page-right'>Page →</button>" +
+        "<button data-action='duplicate-page'>Dupliquer page</button>" +
         "<button data-action='delete-page' class='danger'>Supprimer page</button></div>";
     } else {
       html = "<div class='inspector-head'><strong>Tuile " + (this._tile + 1) + "</strong>" +
