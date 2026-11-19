@@ -43,10 +43,6 @@ final class HaClient {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicInteger sequence = new AtomicInteger(1);
     private final AtomicBoolean redrawPending = new AtomicBoolean(false);
-    private final Runnable redraw = () -> {
-        redrawPending.set(false);
-        if (!stopped) listener.onStatesChanged();
-    };
     private final Map<String, EntityState> states = new ConcurrentHashMap<>();
     private final Listener listener;
     private final String endpoint;
@@ -62,6 +58,10 @@ final class HaClient {
     private volatile boolean receivedStateSnapshot = false;
     private String lastStatusMessage = null;
     private boolean lastStatusConnected = false;
+    private final Runnable redraw = () -> {
+        redrawPending.set(false);
+        if (!stopped) listener.onStatesChanged();
+    };
     private final Runnable reconnect = this::connect;
     private final Runnable snapshotFallback = () -> {
         if (!stopped && authenticated && !receivedStateSnapshot && getStatesId == -1 && entities.length > 0) {
