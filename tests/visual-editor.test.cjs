@@ -37,7 +37,7 @@ for (const [id, css] of Object.entries(editorApi.PRESETS)) {
   assert.ok(css.length <= 12000, id);
   const allowed = new Set([
     ":root", "body", ".header", ".subtitle", ".clock", ".date", ".status",
-    ".settings", ".metric", ".metric-label", ".metric-value", ".control",
+    ".settings", ".section", ".metric", ".metric-label", ".metric-value", ".control",
     ".control-label", ".control-state", ".control.on", ".control.pressed",
     ".card", ".page-tab", ".page-tab.active", ".accent"
   ]);
