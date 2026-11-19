@@ -101,7 +101,7 @@ final class DashboardView extends View {
     private final Runnable endFeedback = () -> { feedbackCard = -1; invalidate(); };
     private final Runnable refreshClock = new Runnable() {
         @Override public void run() {
-            invalidate();
+            refreshContext();
             long next = 60000L - (System.currentTimeMillis() % 60000L);
             postDelayed(this, Math.max(250L, next + 100L));
         }
@@ -129,8 +129,9 @@ final class DashboardView extends View {
     void setClient(HaClient client) { this.client = client; refreshCamera(); invalidate(); }
     void setSleeping(boolean sleep) { if (sleeping != sleep) { sleeping = sleep; refreshCamera(); invalidate(); } }
     private boolean matchesRule(org.json.JSONObject rule) {
-        if (client == null || rule == null) return false;
-        HaClient.EntityState entity = client.get(rule.optString("entity_id", ""));
+        if (rule == null) return false;
+        HaClient.EntityState entity = client == null ? null :
+            client.get(rule.optString("entity_id", ""));
         return DashboardRules.matches(rule, entity == null ? null : entity.state);
     }
 
