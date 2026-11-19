@@ -261,13 +261,16 @@ final class IntegrationApiServer {
                     FrameConfig config = FrameConfig.load(context);
                     send(out, 200, new JSONObject().put("dashboard_title", config.title)
                         .put("custom_css", config.customCss).put("pages", config.pagesJson())
+                        .put("slideshow", config.slideshow)
                         .put("display", DisplayPrefs.load(context).toJson()));
                 } else if ("POST".equals(req.method) && "/api/v1/config".equals(req.path)) {
                     JSONObject body = new JSONObject(req.body);
                     DisplayPrefs display = DisplayPrefs.load(context);
                     if (body.has("display")) display.update(body.getJSONObject("display"));
                     FrameConfig frame = FrameConfig.load(context);
-                    boolean layout = body.has("pages") || body.has("dashboard_title") || body.has("custom_css");
+                    boolean layout = body.has("pages") || body.has("dashboard_title") ||
+                        body.has("custom_css") || body.has("slideshow");
+                    if (body.has("slideshow")) frame.setSlideshow(body.getJSONObject("slideshow"));
                     if (body.has("pages")) frame.setPages(body.getJSONArray("pages"));
                     if (body.has("custom_css")) {
                         frame.customCss = body.getString("custom_css");
