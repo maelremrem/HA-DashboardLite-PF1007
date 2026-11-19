@@ -965,8 +965,8 @@ class HaFrameVisualEditor extends HTMLElement {
           esc(opts.interval_seconds) + "'></label>" +
         "<label class='field'>Source<select data-bind='photo-source'>" +
           option("local","Photos locales sur le cadre",opts.source) +
-          option("camera","Caméra Home Assistant",opts.source) + "</select></label>" +
-        (opts.source==="camera" ? "<label class='field'>Entité caméra<input data-bind='photo-camera' " +
+          option("camera","Caméra Home Assistant",opts.source) + option("image","Image Home Assistant",opts.source) + "</select></label>" +
+        (opts.source!=="local" ? "<label class='field'>Entité caméra ou image<input data-bind='photo-camera' " +
           "list='ha-frame-entities' placeholder='camera.salon' value='" +
           esc(opts.camera_entity||"") + "'></label>" : "") +
         "<label class='field'><span>Horloge sur les photos</span><input type='checkbox' data-bind='photo-clock'" +
@@ -1364,8 +1364,8 @@ class HaFrameVisualEditor extends HTMLElement {
       if (typeof v.enabled!=="boolean" || typeof v.show_clock!=="boolean" ||
           !Number.isInteger(v.idle_seconds) || v.idle_seconds<30 || v.idle_seconds>3600 ||
           !Number.isInteger(v.interval_seconds) || v.interval_seconds<5 || v.interval_seconds>300 ||
-          !["local","camera"].includes(v.source) ||
-          (v.source==="camera" && !/^camera\.[a-z0-9_]+$/.test(v.camera_entity||""))) {
+          !["local","camera","image"].includes(v.source) ||
+          (v.source!=="local" && !/^(?:camera|image)\.[a-z0-9_]+$/.test(v.camera_entity||""))) {
         return "Paramètres du diaporama invalides";
       }
       const active=this._frames.find(f=>f.entry_id===this._frameId);
