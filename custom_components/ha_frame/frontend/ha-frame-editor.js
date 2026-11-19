@@ -213,7 +213,7 @@ function validTileStyle(style) {
     (style.radius == null || (Number.isInteger(style.radius) && style.radius>=0 && style.radius<=72));
 }
 function isAdvancedPage(page) {
-  return page.cards.some(tile=>tile.type==="weather" || tile.type==="graph" ||
+  return page.cards.some(tile=>tile.type==="weather" || tile.type==="graph" || tile.type==="camera" ||
     (tile.col_span||1)!==1 || (tile.row_span||1)!==1 ||
     (tile.icon && tile.icon !== "none") ||
     (tile.style && Object.keys(tile.style).length>0));
