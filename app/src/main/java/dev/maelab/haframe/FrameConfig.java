@@ -102,7 +102,47 @@ final class FrameConfig {
     String baseUrl = "";
     String title = "HA FRAME";
     String customCss = "";
+    JSONObject slideshow = defaultSlideshow();
     final ArrayList<Page> pages = new ArrayList<>();
+
+    static JSONObject defaultSlideshow() {
+        try {
+            return new JSONObject().put("enabled", false).put("idle_seconds", 300)
+                .put("interval_seconds", 30).put("show_clock", true)
+                .put("source", "local").put("camera_entity", "");
+        } catch (Exception ignored) { return new JSONObject(); }
+    }
+
+    void setSlideshow(JSONObject slideshow) throws Exception {
+        if (slideshow == null || slideshow.length() > 6)
+            throw new IllegalArgumentException("Invalid slideshow");
+        java.util.Iterator<String> keys = slideshow.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!("enabled".equals(key) || "idle_seconds".equals(key) ||
+                "interval_seconds".equals(key) || "show_clock".equals(key) ||
+                "source".equals(key) || "camera_entity".equals(key))) {
+                throw new IllegalArgumentException("Unknown slideshow setting");
+            }
+        }
+        if (!(slideshow.opt("enabled") instanceof Boolean) ||
+            !(slideshow.opt("show_clock") instanceof Boolean) ||
+            !(slideshow.opt("idle_seconds") instanceof Number) ||
+            !(slideshow.opt("interval_seconds") instanceof Number)) {
+            throw new IllegalArgumentException("Invalid slideshow value");
+        }
+        int idle = slideshow.getInt("idle_seconds");
+        int interval = slideshow.getInt("interval_seconds");
+        String source = slideshow.optString("source","local");
+        String entity = slideshow.optString("camera_entity","");
+        if (idle < 30 || idle > 3600 || interval < 5 || interval > 300 ||
+            !("local".equals(source) || "camera".equals(source)) ||
+            (!entity.isEmpty() && !entity.matches("camera\\.[a-z0-9_]+")) ||
+            ("camera".equals(source) && entity.isEmpty())) {
+            throw new IllegalArgumentException("Invalid slideshow source or timing");
+        }
+        this.slideshow = new JSONObject(slideshow.toString());
+    }
 
     static FrameConfig load(Context context) {
         SharedPreferences p = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
@@ -110,6 +150,8 @@ final class FrameConfig {
         config.baseUrl = p.getString("url", "").trim();
         config.title = p.getString("dashboard_title", "HA FRAME");
         config.customCss = p.getString("custom_css", "");
+        try { config.setSlideshow(new JSONObject(p.getString("slideshow", config.slideshow.toString()))); }
+        catch (Exception ignored) { config.slideshow = defaultSlideshow(); }
         String savedLayout = p.getString(LAYOUT_KEY, "");
         if (!savedLayout.isEmpty()) {
             try {
@@ -255,6 +297,7 @@ final class FrameConfig {
             .putString("url", baseUrl)
             .putString("dashboard_title", title)
             .putString("custom_css", customCss)
+            .putString("slideshow", slideshow.toString())
             .putString(LAYOUT_KEY, saved.toString())
             .apply();
     }
@@ -267,6 +310,10 @@ final class FrameConfig {
                 if (!card.entityId.isEmpty()) unique.add(card.entityId);
                 if (card.rule != null) unique.add(card.rule.optString("entity_id"));
             }
+        }
+        if ("camera".equals(slideshow.optString("source")) &&
+            slideshow.optBoolean("enabled", false)) {
+            unique.add(slideshow.optString("camera_entity", ""));
         }
         unique.remove("");
         return unique.toArray(new String[0]);
