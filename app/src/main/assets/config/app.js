@@ -34,6 +34,33 @@ body { background-color: #ebf2f5; }
 .control.pressed { background-color: #9fe3d3; }
 .accent { color: var(--accent); }`
 };
+const PALETTE_THEMES = {
+  midnight: {label:"Minuit", bg:"#0b1020", card:"#171f34", on:"#263956", pressed:"#344763", text:"#f4f7ff", muted:"#a8b7cf", accent:"#8aaaff", tab:"#2e3f6a", activeText:"#dce5ff", radius:22},
+  forest: {label:"Forêt", bg:"#071c18", card:"#113129", on:"#1b4b3b", pressed:"#285a4a", text:"#e8fff3", muted:"#aad6c2", accent:"#7ce5ae", tab:"#234e3a", activeText:"#9dffd1", radius:24},
+  lavender: {label:"Lavande", bg:"#171126", card:"#29213b", on:"#463558", pressed:"#56456b", text:"#f8edff", muted:"#cbb9dc", accent:"#d5aaff", tab:"#41325e", activeText:"#f9d8ff", radius:28},
+  rose: {label:"Rose", bg:"#24131a", card:"#40212d", on:"#603044", pressed:"#764357", text:"#fff2f5", muted:"#ddb4c5", accent:"#ff9bb8", tab:"#653149", activeText:"#ffe4ed", radius:28},
+  graphite: {label:"Graphite", bg:"#111315", card:"#262a2e", on:"#383e43", pressed:"#484f56", text:"#f0f1f2", muted:"#aeb8be", accent:"#81d5de", tab:"#394246", activeText:"#bbfaff", radius:8},
+  solar: {label:"Solaire", bg:"#f8f1da", card:"#fff9ec", on:"#fde4b4", pressed:"#ecd29d", text:"#3c2b22", muted:"#795b47", accent:"#c96522", tab:"#f6ddb2", activeText:"#7b3c1c", radius:18},
+  arctic: {label:"Arctique", bg:"#edf7fa", card:"#ffffff", on:"#d1eef7", pressed:"#b9e4ee", text:"#183246", muted:"#537588", accent:"#197ca5", tab:"#c5edf6", activeText:"#174d69", radius:22},
+  retro: {label:"Rétro", bg:"#171c17", card:"#273326", on:"#4b5236", pressed:"#5a6442", text:"#f7f2cf", muted:"#c7c49a", accent:"#d5df74", tab:"#414d2e", activeText:"#eef0a9", radius:5},
+  synthwave: {label:"Synthwave", bg:"#170e2f", card:"#291a4b", on:"#4e2166", pressed:"#6f2b86", text:"#fcddff", muted:"#d4b2ec", accent:"#ff70d9", tab:"#512164", activeText:"#ffe6ff", radius:20},
+  sand: {label:"Sable", bg:"#25231f", card:"#3b352d", on:"#5d4b38", pressed:"#6a5741", text:"#fff1d5", muted:"#dac9a8", accent:"#ffd082", tab:"#665039", activeText:"#ffe4b2", radius:16}
+};
+function paletteCss(p) {
+  return [
+    `:root { --accent: ${p.accent}; }`,
+    `body { background-color: ${p.bg}; }`,
+    `.header, .clock, .metric-value, .settings { color: ${p.text}; }`,
+    `.subtitle, .date, .status, .metric-label { color: ${p.muted}; }`,
+    `.card, .settings { background-color: ${p.card}; border-radius: ${p.radius}px; }`,
+    `.page-tab { background-color: ${p.card}; color: ${p.muted}; border-radius: 12px; }`,
+    `.page-tab.active { background-color: ${p.tab}; color: ${p.activeText}; }`,
+    `.control.on { background-color: ${p.on}; }`,
+    `.control.pressed { background-color: ${p.pressed}; }`,
+    ".accent { color: var(--accent); }"
+  ].join("\n");
+}
+for (const [id,p] of Object.entries(PALETTE_THEMES)) CSS_PRESETS[id] = paletteCss(p);
 const actionDomains = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover', 'scene', 'script', 'button', 'input_button']);
 
 const CARD_TYPES = [['metric', 'Capteur'], ['control', 'Commande'], ['gauge', 'Jauge'],
