@@ -36,18 +36,26 @@ final class TokenVault {
     }
 
     static void save(Context context, String token) throws Exception {
+        saveSecret(context, "token", token);
+    }
+
+    static void saveSecret(Context context, String name, String token) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, key());
         byte[] bytes = cipher.doFinal(token.getBytes(StandardCharsets.UTF_8));
         String result = Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP) + ":" +
             Base64.encodeToString(bytes, Base64.NO_WRAP);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString("token", result).apply();
+            .edit().putString(name, result).apply();
     }
 
     static String load(Context context) throws Exception {
+        return loadSecret(context, "token");
+    }
+
+    static String loadSecret(Context context, String name) throws Exception {
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        String stored = p.getString("token", "");
+        String stored = p.getString(name, "");
         if (stored.isEmpty()) return "";
         String[] chunks = stored.split(":", 2);
         if (chunks.length != 2) throw new IllegalStateException("Token illisible");

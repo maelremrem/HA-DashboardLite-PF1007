@@ -105,3 +105,7 @@ Ordinal selectors are counted **separately within the active page**. If you rear
 ```
 
 The CSS subset remains intentionally strict: no layout rules, selectors beyond the documented set, remote assets, external imports, JavaScript or animations. **Columns and card order are configured in the web editor**, not with CSS.
+
+### v0.7 specialized cards
+
+Native card selectors now also include `.gauge`, `.thermostat`, `.light` and `.cover`. Available CSS remains a safe Canvas-only subset: color, background-color, font-size, font-weight and border-radius (no embedded HTML, scripts or browser DOM).

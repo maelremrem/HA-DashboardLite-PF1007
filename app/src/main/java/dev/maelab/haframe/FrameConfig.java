@@ -21,6 +21,8 @@ final class FrameConfig {
         String type;
         String label;
         String entityId;
+        float min = 0;
+        float max = 100;
 
         Card(String type, String label, String entityId) {
             this.type = type;
@@ -29,7 +31,8 @@ final class FrameConfig {
         }
 
         JSONObject toJson() throws Exception {
-            return new JSONObject().put("type", type).put("label", label).put("entity_id", entityId);
+            return new JSONObject().put("type", type).put("label", label).put("entity_id", entityId)
+                .put("min", min).put("max", max);
         }
     }
 
@@ -103,12 +106,19 @@ final class FrameConfig {
                 String type = item.getString("type");
                 String label = item.getString("label").trim();
                 String entity = item.getString("entity_id").trim();
-                if ((!"metric".equals(type) && !"control".equals(type)) ||
+                if ((!"metric".equals(type) && !"control".equals(type) && !"gauge".equals(type) &&
+                     !"thermostat".equals(type) && !"light".equals(type) && !"cover".equals(type)) ||
                     label.length() > 48 ||
                     (!entity.isEmpty() && !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))) {
                     throw new IllegalArgumentException("Carte invalide : " + (k + 1));
                 }
-                page.cards.add(new Card(type, label, entity));
+                Card card = new Card(type, label, entity);
+                card.min = (float) item.optDouble("min", 0);
+                card.max = (float) item.optDouble("max", 100);
+                if ((Float.isNaN(card.min) || Float.isInfinite(card.min)) ||
+                    (Float.isNaN(card.max) || Float.isInfinite(card.max)) || card.max <= card.min ||
+                    card.max - card.min > 1000000f) throw new IllegalArgumentException("Invalid gauge range");
+                page.cards.add(card);
             }
             parsed.add(page);
         }

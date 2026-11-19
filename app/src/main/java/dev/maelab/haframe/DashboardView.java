@@ -19,6 +19,9 @@ final class DashboardView extends View {
         void settings();
         void command(String id);
         void retryConnection();
+        void level(String entityId, int percent);
+        void temperature(String entityId, double value);
+        void wakeDisplay();
     }
 
     private static final int BG = 0xFF10151E;
@@ -45,6 +48,11 @@ final class DashboardView extends View {
     private Callbacks callbacks;
     private String status = "Configuration nécessaire";
     private boolean connected;
+    private boolean sleeping;
+    private String notificationTitle = "";
+    private String notificationMessage = "";
+    private long notificationUntil;
+    private final Runnable endNotification = () -> { notificationUntil = 0; invalidate(); };
     private float scale = 1f;
     private float dx;
     private float dy;
@@ -76,6 +84,15 @@ final class DashboardView extends View {
         invalidate();
     }
     void setClient(HaClient client) { this.client = client; invalidate(); }
+    void setSleeping(boolean sleep) { if (sleeping != sleep) { sleeping = sleep; invalidate(); } }
+    void showNotification(String title, String message, int seconds) {
+        notificationTitle = title;
+        notificationMessage = message;
+        notificationUntil = SystemClock.elapsedRealtime() + seconds * 1000L;
+        removeCallbacks(endNotification);
+        postDelayed(endNotification, seconds * 1000L);
+        invalidate();
+    }
     void setStatus(String status, boolean connected) {
         this.status = status;
         this.connected = connected;
@@ -89,6 +106,7 @@ final class DashboardView extends View {
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(refreshClock);
         removeCallbacks(endFeedback);
+        removeCallbacks(endNotification);
         super.onDetachedFromWindow();
     }
 
@@ -119,6 +137,7 @@ final class DashboardView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        if (sleeping) { canvas.drawColor(0xFF000000); return; }
         canvas.drawColor(theme.color(BG, "background-color", "body"));
         scale = Math.min(getWidth() / 1280f, getHeight() / 800f);
         if (scale <= 0f) return;
@@ -149,6 +168,7 @@ final class DashboardView extends View {
             drawTabs(canvas);
             drawCards(canvas, config.pages.get(pageIndex));
         }
+        if (notificationUntil > SystemClock.elapsedRealtime()) drawNotification(canvas);
         canvas.restore();
     }
 
@@ -186,62 +206,103 @@ final class DashboardView extends View {
         return GRID_Y + (index / columns(page)) * (cardHeight(page) + CELL_GAP);
     }
 
+    private void drawNotification(Canvas canvas) {
+        rect(canvas, 170, 235, 940, 330, 30, 0xFF0E2631);
+        rect(canvas, 188, 250, 9, 290, 4, ACCENT);
+        text(canvas, notificationTitle.isEmpty() ? "Notification Home Assistant" : notificationTitle,
+            230, 322, 34, ACCENT, true, 820);
+        String message = notificationMessage;
+        for (int i = 0; i < 4 && !message.isEmpty(); i++) {
+            int limit = Math.min(message.length(), 51);
+            int cut = message.length() <= limit ? message.length() : message.lastIndexOf(' ', limit);
+            if (cut <= 0) cut = limit;
+            text(canvas, message.substring(0, cut).trim(), 230, 385 + i * 43, 27, TEXT, false, 830);
+            message = message.substring(cut).trim();
+        }
+    }
+
+    private static boolean finite(float value) { return !Float.isNaN(value) && !Float.isInfinite(value); }
+
+    private static float parseNumber(String value, float fallback) {
+        try { return Float.parseFloat(value); }
+        catch (Exception e) { return fallback; }
+    }
+
+    private static float clamp(float value, float low, float high) {
+        return Math.max(low, Math.min(high, value));
+    }
+
+    private void bar(Canvas canvas, float x, float y, float width, float percent, int color) {
+        rect(canvas, x, y, width, 12, 6, 0xFF394757);
+        rect(canvas, x, y, Math.max(8, width * clamp(percent, 0, 100) / 100f), 12, 6, color);
+    }
+
     private void drawCards(Canvas canvas, FrameConfig.Page page) {
         if (page.cards.isEmpty()) {
             text(canvas, "Cette page est vide", GRID_X + 18, GRID_Y + 75, 27, MUTED, false, 700);
             return;
         }
-        int metricNumber = 0;
-        int controlNumber = 0;
+        int metricNumber = 0, controlNumber = 0;
         for (int i = 0; i < page.cards.size(); i++) {
             FrameConfig.Card card = page.cards.get(i);
             boolean metric = "metric".equals(card.type);
+            boolean actionable = !metric && !"gauge".equals(card.type);
             String slot = metric ? ".metric-" + (++metricNumber) : ".control-" + (++controlNumber);
-            float x = cardLeft(page, i);
-            float y = cardTop(page, i);
-            float w = cardWidth(page);
-            float h = cardHeight(page);
+            float x = cardLeft(page, i), y = cardTop(page, i);
+            float w = cardWidth(page), h = cardHeight(page);
             HaClient.EntityState state = card.entityId.isEmpty() || client == null ? null : client.get(card.entityId);
-            boolean on = connected && state != null &&
-                ("on".equals(state.state) || "open".equals(state.state) || "playing".equals(state.state));
-            boolean pressed = !metric && (touchedCard == i || feedbackCard == i);
-            String category = metric ? ".metric" : ".control";
-            String modifier = metric ? category : pressed ? ".control.pressed" : on ? ".control.on" : category;
-            rect(canvas, x, y, w, h,
-                theme.size(20, "border-radius", ".card", category, slot),
+            boolean valid = connected && state != null && !"unavailable".equals(state.state) && !"unknown".equals(state.state);
+            boolean on = valid && ("on".equals(state.state) || "open".equals(state.state) || "playing".equals(state.state));
+            boolean pressed = actionable && (touchedCard == i || feedbackCard == i);
+            String category = "." + card.type;
+            String modifier = pressed ? ".control.pressed" : on ? ".control.on" : category;
+            rect(canvas, x, y, w, h, theme.size(20, "border-radius", ".card", category, slot),
                 theme.color(pressed ? PANEL_PRESSED : on ? PANEL_ON : PANEL,
                     "background-color", ".card", category, slot, modifier));
+            text(canvas, card.label.isEmpty() ? card.entityId : card.label, x + 20, y + 39,
+                theme.size(20, "font-size", ".metric-label", category, slot),
+                theme.color(MUTED, "color", ".metric-label", category, slot), false, w - 40);
+            String unavailable = card.entityId.isEmpty() ? "À configurer" : !connected ? "Hors ligne" : "En attente…";
+            if (!valid) {
+                text(canvas, unavailable, x + 20, y + h - 27, 21, MUTED, true, w - 40);
+                continue;
+            }
             if (metric) {
-                text(canvas, card.label, x + 20, y + 37,
-                    theme.size(20, "font-size", ".metric-label", slot),
-                    theme.color(MUTED, "color", ".metric-label", slot), false, w - 40);
-                String value = "À configurer";
-                int color = 0xFF78879D;
-                if (!card.entityId.isEmpty()) {
-                    if (!connected) value = "Hors ligne";
-                    else if (state == null) value = "En attente…";
-                    else if ("unknown".equals(state.state) || "unavailable".equals(state.state)) value = "Indisponible";
-                    else {
-                        value = state.state + (state.unit().isEmpty() ? "" : " " + state.unit());
-                        color = TEXT;
-                    }
-                }
+                String value = state.state + (state.unit().isEmpty() ? "" : " " + state.unit());
                 text(canvas, value, x + 20, y + h - 26,
                     theme.size(34, "font-size", ".metric-value", slot),
-                    theme.color(color, "color", ".metric-value", slot), true, w - 40);
+                    theme.color(TEXT, "color", ".metric-value", slot), true, w - 40);
+            } else if ("gauge".equals(card.type)) {
+                float value = parseNumber(state.state, Float.NaN);
+                if (!finite(value)) { text(canvas, "Non numérique", x + 20, y + h - 26, 20, MUTED, false, w - 40); continue; }
+                text(canvas, state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
+                    x + 20, y + 94, 35, TEXT, true, w - 40);
+                float pct = 100f * (value - card.min) / (card.max - card.min);
+                bar(canvas, x + 20, y + h - 32, w - 40, pct, ACCENT);
+            } else if ("thermostat".equals(card.type)) {
+                float temp = (float) state.attributes.optDouble("current_temperature", Float.NaN);
+                float target = (float) state.attributes.optDouble("temperature", Float.NaN);
+                if (!finite(target)) {
+                    text(canvas, "Aucune consigne", x + 20, y + h - 27, 21, MUTED, false, w - 40);
+                } else {
+                    text(canvas, "Cible " + target + "°C", x + 20, y + h - 25, 23, TEXT, true, w - 145);
+                    if (finite(temp)) text(canvas, "Actuel " + temp + "°C", x + 20, y + 93, 22, MUTED, false, w - 150);
+                    rect(canvas, x + w - 112, y + h - 76, 44, 52, 10, PANEL_ON);
+                    rect(canvas, x + w - 62, y + h - 76, 44, 52, 10, PANEL_ON);
+                    text(canvas, "−", x + w - 98, y + h - 39, 33, TEXT, true, 30);
+                    text(canvas, "+", x + w - 50, y + h - 39, 29, TEXT, true, 30);
+                }
+            } else if ("light".equals(card.type) || "cover".equals(card.type)) {
+                float percent = "light".equals(card.type)
+                    ? (float) state.attributes.optDouble("brightness", 0) * 100f / 255f
+                    : (float) state.attributes.optDouble("current_position", 0);
+                text(canvas, "light".equals(card.type) ? (on ? "Allumée" : "Éteinte") : state.state,
+                    x + 20, y + 90, 23, TEXT, true, w - 40);
+                bar(canvas, x + 20, y + h - 34, w - 40, percent, ACCENT);
             } else {
-                rect(canvas, x + 20, y + 26, 12, 12, 6,
-                    on ? theme.color(ACCENT, "color", ".accent") : 0xFF66768D);
-                text(canvas, card.label, x + 46, y + 41,
-                    theme.size(23, "font-size", ".control-label", slot),
-                    theme.color(TEXT, "color", ".control-label", slot), true, w - 65);
-                String secondary = card.entityId.isEmpty() ? "À configurer" :
-                    !connected ? "Hors ligne" : state == null ? "En attente…" : state.state;
-                if ("on".equals(secondary)) secondary = "Allumé";
-                else if ("off".equals(secondary)) secondary = "Éteint";
-                text(canvas, secondary, x + 22, y + h - 26,
-                    theme.size(19, "font-size", ".control-state", slot),
-                    theme.color(MUTED, "color", ".control-state", slot), false, w - 42);
+                rect(canvas, x + 20, y + h - 36, 12, 12, 6, on ? ACCENT : 0xFF66768D);
+                text(canvas, "on".equals(state.state) ? "Allumé" : "off".equals(state.state) ? "Éteint" : state.state,
+                    x + 46, y + h - 26, 21, MUTED, false, w - 60);
             }
         }
     }
@@ -267,7 +328,10 @@ final class DashboardView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
-        if (scale <= 0f) return true;
+        if (sleeping) {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP && callbacks != null) callbacks.wakeDisplay();
+            return true;
+        }
         float x = (event.getX() - dx) / scale;
         float y = (event.getY() - dy) / scale;
         switch (event.getActionMasked()) {
@@ -309,7 +373,7 @@ final class DashboardView extends View {
                 }
                 if (selected < 0 || selected != cardAt(x, y)) return true;
                 FrameConfig.Card card = config.pages.get(pageIndex).cards.get(selected);
-                if (!"control".equals(card.type)) return true;
+                if ("metric".equals(card.type) || "gauge".equals(card.type)) return true;
                 if (card.entityId.isEmpty()) { callbacks.settings(); return true; }
                 long now = SystemClock.elapsedRealtime();
                 if (card.entityId.equals(lastCommandId) && now - lastCommandAt < 700L) return true;
@@ -320,6 +384,30 @@ final class DashboardView extends View {
                 postDelayed(endFeedback, 180L);
                 invalidate();
                 performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                float cardX = cardLeft(config.pages.get(pageIndex), selected);
+                float cardY = cardTop(config.pages.get(pageIndex), selected);
+                float cw = cardWidth(config.pages.get(pageIndex));
+                float ch = cardHeight(config.pages.get(pageIndex));
+                if (("light".equals(card.type) || "cover".equals(card.type)) && y >= cardY + ch - 58) {
+                    int percent = Math.round(100f * clamp((x - cardX - 20) / (cw - 40), 0, 1));
+                    callbacks.level(card.entityId, percent);
+                    return true;
+                }
+                if ("thermostat".equals(card.type)) {
+                    HaClient.EntityState e = client == null ? null : client.get(card.entityId);
+                    if (e == null) return true;
+                    double target = e.attributes.optDouble("temperature", Double.NaN);
+                    if (Double.isNaN(target)) return true;
+                    if (y >= cardY + ch - 90 && x >= cardX + cw - 122) {
+                        double step = e.attributes.optDouble("target_temp_step", 0.5);
+                        if (!(!Double.isNaN(step) && !Double.isInfinite(step)) || step <= 0 || step > 5) step = 0.5;
+                        double min = e.attributes.optDouble("min_temp", 5);
+                        double max = e.attributes.optDouble("max_temp", 35);
+                        double next = target + (x >= cardX + cw - 64 ? step : -step);
+                        callbacks.temperature(card.entityId, Math.max(min, Math.min(max, next)));
+                    }
+                    return true;
+                }
                 callbacks.command(card.entityId);
                 return true;
             default:
