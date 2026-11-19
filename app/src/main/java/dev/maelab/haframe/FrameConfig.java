@@ -188,6 +188,9 @@ final class FrameConfig {
                 }
                 page.cards.add(card);
             }
+            int cameraCount = 0;
+            for (Card card : page.cards) if ("camera".equals(card.type)) cameraCount++;
+            if (cameraCount > 1) throw new IllegalArgumentException("One camera per page maximum");
             TileGrid.place(columns, page.columnSpans(), page.rowSpans());
             parsed.add(page);
         }
