@@ -43,12 +43,16 @@ function tileAutoIcon(tile, hass) {
   return DOMAIN_MDI[domain] || DOMAIN_MDI[tile.type] || "mdi:bookmark-outline";
 }
 function tileIconMarkup(icon, type, color, entityId, hass) {
-  const name = icon === "none" ? "" :
-    mdiIconName(icon) || tileAutoIcon({type,entity_id:entityId},hass);
+  if (icon === "none") return "";
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#67dbba";
+  if (!icon && entityId && hass && hass.states && hass.states[entityId]) {
+    return "<ha-state-icon class='tile-icon' data-state-entity='" +
+      esc(entityId) + "' style='color:" + safeColor + "'></ha-state-icon>";
+  }
+  const name = mdiIconName(icon) || tileAutoIcon({type,entity_id:entityId},hass);
   if (!MDI_REGEX.test(name)) return "";
   return "<ha-icon class='tile-icon' icon='" + esc(name) +
-    "' style='color:" + (/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#67dbba") +
-    "' aria-hidden='true'></ha-icon>";
+    "' style='color:" + safeColor + "' aria-hidden='true'></ha-icon>";
 }
 
 const PRESETS = {
@@ -637,6 +641,12 @@ class HaFrameVisualEditor extends HTMLElement {
       "<div class='screen-grid' style='grid-template-columns:repeat(" + page.columns +
       ",minmax(0,1fr));grid-template-rows:repeat(" + layout.rows + "," +
       rowPct.toFixed(3) + "%)'>" + grid + "</div></div>";
+    if (target.querySelectorAll) {
+      for (const element of target.querySelectorAll("[data-state-entity]")) {
+        const state = this._hass && this._hass.states && this._hass.states[element.dataset.stateEntity];
+        if (state) element.stateObj = state;
+      }
+    }
   }
   _inspector() {
     const target = this.shadowRoot.querySelector("[data-inspector]");
