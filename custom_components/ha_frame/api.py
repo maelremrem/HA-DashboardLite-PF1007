@@ -57,3 +57,21 @@ class FrameApi:
 
     async def wake(self) -> None:
         await self.call("POST", "/api/v1/wake", {})
+
+    async def logs(self) -> list[str]:
+        result = await self.call("GET", "/api/v1/logs")
+        events = result.get("events", [])
+        return [event for event in events if isinstance(event, str)][:60] if isinstance(events, list) else []
+
+    async def screenshot(self) -> dict:
+        """Receive a compressed, bounded JPEG (read-only)."""
+        image = await self.call("GET", "/api/v1/screenshot")
+        if image.get("format") != "image/jpeg" or not isinstance(image.get("data"), str) \
+                or len(image["data"]) > 320000:
+            raise FrameApiError("Invalid screenshot response")
+        return image
+
+    async def reload_dashboard(self) -> None:
+        """Explicitly reload the running dashboard; do not reboot the device."""
+        await self.call("POST", "/api/v1/reload", {"action": "reload_dashboard"})
+

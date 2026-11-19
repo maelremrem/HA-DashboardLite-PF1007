@@ -1,10 +1,16 @@
 package dev.maelab.haframe;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.SystemClock;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import java.security.MessageDigest;
 
 import org.json.JSONObject;
 
@@ -17,6 +23,24 @@ final class DeviceDiagnostics {
     static JSONObject snapshot(Context context) throws Exception {
         JSONObject data = new JSONObject();
         data.put("version", packageVersion(context));
+        data.put("signing_cert_sha256", signingCertificate(context));
+        Runtime runtime=Runtime.getRuntime();
+        data.put("heap_used_mb", (runtime.totalMemory()-runtime.freeMemory())/1048576L);
+        data.put("heap_max_mb", runtime.maxMemory()/1048576L);
+        data.put("battery_temperature_c", JSONObject.NULL);
+        data.put("battery_percent", JSONObject.NULL);
+        try {
+            Intent battery=context.registerReceiver(null,
+                new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (battery!=null) {
+                int temp=battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,-1);
+                if (temp>0) data.put("battery_temperature_c", temp/10.0);
+                int level=battery.getIntExtra(BatteryManager.EXTRA_LEVEL,-1);
+                int scale=battery.getIntExtra(BatteryManager.EXTRA_SCALE,-1);
+                if (level>=0 && scale>0) data.put("battery_percent",
+                    Math.round(100f*level/scale));
+            }
+        } catch (RuntimeException ignored) {}
         data.put("android_version", Build.VERSION.RELEASE);
         data.put("uptime_seconds", SystemClock.elapsedRealtime() / 1000L);
         data.put("wifi_connected", false);
@@ -65,6 +89,19 @@ final class DeviceDiagnostics {
             // Some firmware revisions restrict Wi-Fi metadata.
         }
         return data;
+    }
+
+    private static String signingCertificate(Context context) {
+        try {
+            PackageInfo info = context.getPackageManager()
+                .getPackageInfo(context.getPackageName(), PackageManager.GET_SIGNATURES);
+            if (info.signatures == null || info.signatures.length == 0) return "unknown";
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(info.signatures[0].toByteArray());
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest) hex.append(String.format(Locale.US, "%02x", b & 255));
+            return hex.toString();
+        } catch (Exception ignored) { return "unknown"; }
     }
 
     private static String packageVersion(Context context) {

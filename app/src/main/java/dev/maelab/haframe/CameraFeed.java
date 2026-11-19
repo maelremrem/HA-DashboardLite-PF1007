@@ -73,7 +73,10 @@ final class CameraFeed {
         URI ws = new URI(endpoint);
         String scheme = "wss".equalsIgnoreCase(ws.getScheme()) ? "https" : "http";
         String basePath = ws.getPath().replaceFirst("/api/websocket/?$", "");
-        String path = basePath + (stream ? "/api/camera_proxy_stream/" : "/api/camera_proxy/") + entityId;
+        String prefix = entityId.startsWith("image.") ?
+            (stream ? "/api/image_proxy_stream/" : "/api/image_proxy/") :
+            (stream ? "/api/camera_proxy_stream/" : "/api/camera_proxy/");
+        String path = basePath + prefix + entityId;
         return new URI(scheme, null, ws.getHost(), ws.getPort(), path,
             stream ? "interval=1.0" : null, null).toASCIIString();
     }
@@ -159,10 +162,12 @@ final class CameraFeed {
 
     private void run(String entityId, int id) {
         while (running(entityId, id)) {
-            try {
-                stream(entityId, id);
-            } catch (Exception ignored) {
-                // Some cameras cannot provide MJPEG; try snapshots instead.
+            if (!entityId.startsWith("image.")) {
+                try {
+                    stream(entityId, id);
+                } catch (Exception ignored) {
+                    // Some cameras cannot provide MJPEG; try snapshots instead.
+                }
             }
             if (!running(entityId, id)) return;
             try {

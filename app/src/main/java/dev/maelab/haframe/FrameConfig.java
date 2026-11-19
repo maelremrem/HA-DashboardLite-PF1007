@@ -31,6 +31,10 @@ final class FrameConfig {
         String icon = "";
         String iconPath = "";
         int radius = -1;
+        int historyHours = 24;
+        JSONObject rule = null;
+        String tapAction = "default";
+        String longPress = "none";
 
         Card(String type, String label, String entityId) {
             this.type = type;
@@ -51,6 +55,10 @@ final class FrameConfig {
             if (style.length() > 0) item.put("style", style);
             if (!icon.isEmpty()) item.put("icon", icon);
             if (!iconPath.isEmpty()) item.put("icon_path", iconPath);
+            if (historyHours != 24) item.put("history_hours", historyHours);
+            if (rule != null) item.put("rule", rule);
+            if (!"default".equals(tapAction)) item.put("tap_action", tapAction);
+            if (!"none".equals(longPress)) item.put("long_press", longPress);
             return item;
         }
     }
@@ -59,6 +67,7 @@ final class FrameConfig {
         String title;
         int columns;
         final ArrayList<Card> cards = new ArrayList<>();
+        JSONObject activateWhen = null;
 
         Page(String title, int columns) {
             this.title = title;
@@ -84,14 +93,56 @@ final class FrameConfig {
         JSONObject toJson() throws Exception {
             JSONArray items = new JSONArray();
             for (Card card : cards) items.put(card.toJson());
-            return new JSONObject().put("title", title).put("columns", columns).put("cards", items);
+            JSONObject item = new JSONObject().put("title", title).put("columns", columns).put("cards", items);
+            if (activateWhen != null) item.put("activate_when", activateWhen);
+            return item;
         }
     }
 
     String baseUrl = "";
     String title = "HA FRAME";
     String customCss = "";
+    JSONObject slideshow = defaultSlideshow();
     final ArrayList<Page> pages = new ArrayList<>();
+
+    static JSONObject defaultSlideshow() {
+        try {
+            return new JSONObject().put("enabled", false).put("idle_seconds", 300)
+                .put("interval_seconds", 30).put("show_clock", true)
+                .put("source", "local").put("camera_entity", "");
+        } catch (Exception ignored) { return new JSONObject(); }
+    }
+
+    void setSlideshow(JSONObject slideshow) throws Exception {
+        if (slideshow == null || slideshow.length() > 6)
+            throw new IllegalArgumentException("Invalid slideshow");
+        java.util.Iterator<String> keys = slideshow.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!("enabled".equals(key) || "idle_seconds".equals(key) ||
+                "interval_seconds".equals(key) || "show_clock".equals(key) ||
+                "source".equals(key) || "camera_entity".equals(key))) {
+                throw new IllegalArgumentException("Unknown slideshow setting");
+            }
+        }
+        if (!(slideshow.opt("enabled") instanceof Boolean) ||
+            !(slideshow.opt("show_clock") instanceof Boolean) ||
+            !(slideshow.opt("idle_seconds") instanceof Number) ||
+            !(slideshow.opt("interval_seconds") instanceof Number)) {
+            throw new IllegalArgumentException("Invalid slideshow value");
+        }
+        int idle = slideshow.getInt("idle_seconds");
+        int interval = slideshow.getInt("interval_seconds");
+        String source = slideshow.optString("source","local");
+        String entity = slideshow.optString("camera_entity","");
+        if (idle < 30 || idle > 3600 || interval < 5 || interval > 300 ||
+            !("local".equals(source) || "camera".equals(source) || "image".equals(source)) ||
+            (!entity.isEmpty() && !entity.matches("(?:camera|image)\\.[a-z0-9_]+")) ||
+            (!"local".equals(source) && entity.isEmpty())) {
+            throw new IllegalArgumentException("Invalid slideshow source or timing");
+        }
+        this.slideshow = new JSONObject(slideshow.toString());
+    }
 
     static FrameConfig load(Context context) {
         SharedPreferences p = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
@@ -99,6 +150,8 @@ final class FrameConfig {
         config.baseUrl = p.getString("url", "").trim();
         config.title = p.getString("dashboard_title", "HA FRAME");
         config.customCss = p.getString("custom_css", "");
+        try { config.setSlideshow(new JSONObject(p.getString("slideshow", config.slideshow.toString()))); }
+        catch (Exception ignored) { config.slideshow = defaultSlideshow(); }
         String savedLayout = p.getString(LAYOUT_KEY, "");
         if (!savedLayout.isEmpty()) {
             try {
@@ -141,6 +194,10 @@ final class FrameConfig {
                 throw new IllegalArgumentException("Page invalide : titre ou colonnes");
             }
             Page page = new Page(name, columns);
+            page.activateWhen = source.optJSONObject("activate_when");
+            if (source.has("activate_when") && page.activateWhen == null)
+                throw new IllegalArgumentException("Invalid page automation");
+            DashboardRules.validate(page.activateWhen, false);
             JSONArray cards = source.getJSONArray("cards");
             if (cards.length() > Math.min(MAX_CARDS_PER_PAGE, columns * 3)) {
                 throw new IllegalArgumentException("Maximum 3 rangées par page (colonnes × 3 cartes)");
@@ -152,7 +209,10 @@ final class FrameConfig {
                 String entity = item.getString("entity_id").trim();
                 if ((!"metric".equals(type) && !"control".equals(type) && !"gauge".equals(type) &&
                      !"thermostat".equals(type) && !"light".equals(type) && !"cover".equals(type) &&
-                     !"weather".equals(type) && !"graph".equals(type) && !"camera".equals(type)) ||
+                     !"weather".equals(type) && !"graph".equals(type) && !"camera".equals(type) &&
+                     !"calendar".equals(type) && !"todo".equals(type) && !"bambu".equals(type) &&
+                     !"energy".equals(type) && !"air_quality".equals(type) && !"presence".equals(type) &&
+                     !"circular_gauge".equals(type) && !"history".equals(type)) ||
                     label.length() > 48 ||
                     (!entity.isEmpty() && !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))) {
                     throw new IllegalArgumentException("Carte invalide : " + (k + 1));
@@ -160,6 +220,17 @@ final class FrameConfig {
                 Card card = new Card(type, label, entity);
                 card.min = (float) item.optDouble("min", 0);
                 card.max = (float) item.optDouble("max", 100);
+                card.historyHours = item.optInt("history_hours", 24);
+                if (card.historyHours != 1 && card.historyHours != 24 && card.historyHours != 168)
+                    throw new IllegalArgumentException("Invalid history period");
+                card.tapAction = item.optString("tap_action", "default");
+                card.longPress = item.optString("long_press", "none");
+                if (!DashboardRules.validTap(card.tapAction) || !DashboardRules.validLongPress(card.longPress))
+                    throw new IllegalArgumentException("Invalid tile action");
+                card.rule = item.optJSONObject("rule");
+                if (item.has("rule") && card.rule == null)
+                    throw new IllegalArgumentException("Invalid tile rule");
+                DashboardRules.validate(card.rule, true);
                 if ((Float.isNaN(card.min) || Float.isInfinite(card.min)) ||
                     (Float.isNaN(card.max) || Float.isInfinite(card.max)) || card.max <= card.min ||
                     card.max - card.min > 1000000f) throw new IllegalArgumentException("Invalid gauge range");
@@ -226,15 +297,25 @@ final class FrameConfig {
             .putString("url", baseUrl)
             .putString("dashboard_title", title)
             .putString("custom_css", customCss)
+            .putString("slideshow", slideshow.toString())
             .putString(LAYOUT_KEY, saved.toString())
             .apply();
     }
 
     String[] subscribedEntityIds() {
         Set<String> unique = new LinkedHashSet<>();
-        for (Page page : pages) for (Card card : page.cards) {
-            if (!card.entityId.isEmpty()) unique.add(card.entityId);
+        for (Page page : pages) {
+            if (page.activateWhen != null) unique.add(page.activateWhen.optString("entity_id"));
+            for (Card card : page.cards) {
+                if (!card.entityId.isEmpty()) unique.add(card.entityId);
+                if (card.rule != null) unique.add(card.rule.optString("entity_id"));
+            }
         }
+        if ("camera".equals(slideshow.optString("source")) &&
+            slideshow.optBoolean("enabled", false)) {
+            unique.add(slideshow.optString("camera_entity", ""));
+        }
+        unique.remove("");
         return unique.toArray(new String[0]);
     }
 

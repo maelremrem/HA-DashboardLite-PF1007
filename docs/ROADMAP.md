@@ -1,6 +1,6 @@
 # HA Frame Studio / PF1007 — roadmap
 
-Baseline: **Home Assistant integration 1.4.0** + **Android APK 1.1.1** (Android 6.0.1, API 23, 1280×800).
+Original baseline: **Home Assistant integration 1.4.0** + **Android APK 1.1.1** (Android 6.0.1, API 23, 1280×800).
 The release numbers below are **planned**, not guarantees. Ship in order, with separate Home Assistant and Android versions as needed.
 
 Priority: **P0** = protect existing data / essential foundation; **P1** = main functionality; **P2** = nice-to-have.
@@ -41,9 +41,26 @@ Each phase needs a green CI run, UI review in Home Assistant, a test with a phys
 - Profile synchronization is opt-in per frame; preserve each frame’s separate configuration, revisions and device identity.
 - A rooted PF1007 may support privileged installation, but signed APK distribution, recovery and rollback must be designed before enabling remote updates.
 
+## Implementation status (v2.1 feature branch)
+
+**v1.5: merged into main**, including the Studio workflow and its tests.
+
+**v1.6–v2.1: implemented as one experimental integration + APK 2.1.0 feature bundle** on `feature/v2-roadmap-native-dashboard` (PR #12). The core data paths, UI controls and native renderers are present; automated tests compile and check contracts. Device-level acceptance is intentionally postponed to the final test phase.
+
+The following original roadmap items are **partial or intentionally deferred**:
+
+- Rich calendar/todo/Bambu data: consumes HA entity state/attributes; a full server-side multi-event/calendar/todo-item aggregator isn't included.
+- Dynamic icons on rule changes: conditional backgrounds and hiding work; dynamic icon switching is not included.
+- Photo transitions: basic image switching; animation and HA media library album synchronization not included.
+- Remote management: refresh/reload of the app dashboard, **not an Android system reboot**.
+- OTA: local signed APK verification and on-device installation confirmation, **not unattended network download, remote silent installation or automatic rollback**.
+- HA notifications use the existing notify endpoint; additional image attachments and a priority-based notification queue not included.
+
+This is an **experimental release candidate until tested physically on Android 6 PF1007**. Do not rely on unattended updates. See [v2 test guide](v2-setup.md).
+
 ## Milestones and review
 
-1. **v1.5 implementation in progress on feature/studio-v1.5-visual-workflow:** automated regression tests and CI are required; manual test in HA Studio before merging.
+1. **v1.5 merged into main.** The v2.1 bundle is in draft PR #12; test on the physical PF1007 before a stable release.
 2. Before each later release, confirm widget data contracts and memory/performance budget on Android 6.
 3. Document Home Assistant ↔ APK minimum compatible versions, upgrade path and safe fallback.
 4. Keep CI green and validate at least one physical device after each Android-facing change.

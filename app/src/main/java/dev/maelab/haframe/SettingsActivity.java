@@ -157,6 +157,16 @@ public final class SettingsActivity extends Activity {
         add(root, text("Token chiffré avec Android Keystore. Utiliser HTTPS lorsque possible ; ne jamais exposer le token.",
             13, 0xFF91A1B5), 20);
 
+        add(root, text("MISE À JOUR APK SÉCURISÉE", 19, 0xFF6BA8FF), 9);
+        add(root, text("Copie candidate.apk dans Android/data/dev.maelab.haframe/files/updates/ ; " +
+            "l’APK doit utiliser la même signature et un numéro de version supérieur. " +
+            "Aucune installation automatique : confirmation sur le cadre obligatoire.",
+            13, 0xFF91A1B5), 6);
+        Button updateApk = new Button(this);
+        updateApk.setText("VÉRIFIER UN APK ET OUVRIR L’INSTALLATEUR");
+        updateApk.setOnClickListener(v -> verifyUpdate());
+        add(root, updateApk, 18);
+
         add(root, text("PAGES ET CARTES", 20, 0xFF6BA8FF), 10);
         add(root, text("Gère les pages, les capteurs, les commandes et la disposition depuis le serveur web. " +
             "Le dashboard reste une application Android native sans WebView.", 14, 0xFF91A1B5), 18);
@@ -169,6 +179,44 @@ public final class SettingsActivity extends Activity {
         cancel.setOnClickListener(v -> finish());
         add(root, cancel, 0);
         setContentView(scroll);
+    }
+
+    private void verifyUpdate() {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    final UpdateVerifier.Candidate candidate=UpdateVerifier.verify(SettingsActivity.this);
+                    runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            new android.app.AlertDialog.Builder(SettingsActivity.this)
+                                .setTitle("APK signé et vérifié : " + candidate.version)
+                                .setMessage("Empreinte SHA-256 :\\n" + candidate.sha256 +
+                                    "\\n\\nL’installation demandera une confirmation Android.")
+                                .setPositiveButton("Installer", new android.content.DialogInterface.OnClickListener() {
+                                    @Override public void onClick(android.content.DialogInterface dialog,int which) {
+                                        try { UpdateVerifier.launchInstaller(SettingsActivity.this,candidate); }
+                                        catch (Exception exc) {
+                                            Toast.makeText(SettingsActivity.this,
+                                                "Installation indisponible : "+exc.getClass().getSimpleName(),
+                                                Toast.LENGTH_LONG).show();
+                                        }
+                                    }
+                                })
+                                .setNegativeButton("Annuler",null)
+                                .show();
+                        }
+                    });
+                } catch (Exception error) {
+                    final String message=error.getClass().getSimpleName()+": "+error.getMessage();
+                    runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            Toast.makeText(SettingsActivity.this,
+                                "APK refusé : "+message,Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            }
+        }, "haframe-verify-update").start();
     }
 
     private void SensorManagerStatus(LinearLayout root) {

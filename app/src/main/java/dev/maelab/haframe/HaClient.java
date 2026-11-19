@@ -7,6 +7,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.Map;
 import java.util.ArrayDeque;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,6 +54,11 @@ final class HaClient {
     private final AtomicBoolean redrawPending = new AtomicBoolean(false);
     private final Map<String, EntityState> states = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ArrayDeque<Float>> trends = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, HistoryCache> histories = new ConcurrentHashMap<>();
+    private static final class HistoryCache {
+        volatile float[] values = new float[0];
+        volatile long nextRequestAt;
+    }
     private final CameraFeed cameraFeed;
     private final Listener listener;
     private final String endpoint;
@@ -134,6 +146,85 @@ final class HaClient {
             int i = 0;
             for (Float number : values) result[i++] = number;
             return result;
+        }
+    }
+
+    /** Bounded authenticated time-window history for the visible history widget. */
+    float[] historySamples(final String entity, final int hours) {
+        if (stopped || !authenticated || !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+") ||
+            (hours != 1 && hours != 24 && hours != 168)) return new float[0];
+        final String key = entity + "|" + hours;
+        HistoryCache cache = histories.get(key);
+        if (cache == null) {
+            HistoryCache created = new HistoryCache();
+            HistoryCache existing = histories.putIfAbsent(key, created);
+            cache = existing == null ? created : existing;
+        }
+        final HistoryCache current = cache;
+        long now = System.currentTimeMillis();
+        if (now >= current.nextRequestAt) {
+            synchronized (current) {
+                if (now >= current.nextRequestAt) {
+                    current.nextRequestAt = now + 300000L;
+                    try {
+                        client.dispatcher().executorService().execute(new Runnable() {
+                            @Override public void run() { fetchHistory(entity, hours, current); }
+                        });
+                    } catch (RuntimeException ignored) {}
+                }
+            }
+        }
+        return current.values;
+    }
+
+    private void fetchHistory(String entity, int hours, HistoryCache cache) {
+        try {
+            String web = endpoint.startsWith("wss:") ? "https:" + endpoint.substring(4)
+                : endpoint.startsWith("ws:") ? "http:" + endpoint.substring(3) : "";
+            if (!web.endsWith("/api/websocket")) return;
+            String base = web.substring(0, web.length() - "/api/websocket".length());
+            SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+            iso.setTimeZone(TimeZone.getTimeZone("UTC"));
+            String start = iso.format(new Date(System.currentTimeMillis() - hours * 3600000L));
+            String url = base + "/api/history/period/" + start +
+                "?filter_entity_id=" + URLEncoder.encode(entity, "UTF-8") +
+                "&minimal_response&no_attributes";
+            okhttp3.Request request = new okhttp3.Request.Builder().url(url)
+                .header("Authorization", "Bearer " + token).build();
+            try (okhttp3.Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return;
+                InputStream input = response.body().byteStream();
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                byte[] part = new byte[4096];
+                int length;
+                while ((length = input.read(part)) >= 0) {
+                    if (buffer.size() + length > 262144) return;
+                    buffer.write(part, 0, length);
+                }
+                JSONArray groups = new JSONArray(new String(buffer.toByteArray(), "UTF-8"));
+                if (groups.length() < 1) return;
+                JSONArray points = groups.optJSONArray(0);
+                if (points == null) return;
+                java.util.ArrayList<Float> values = new java.util.ArrayList<>();
+                for (int i = 0; i < points.length(); i++) {
+                    JSONObject item = points.optJSONObject(i);
+                    if (item == null) continue;
+                    try {
+                        float value = Float.parseFloat(item.optString("state", ""));
+                        if (!Float.isNaN(value) && !Float.isInfinite(value)) values.add(value);
+                    } catch (NumberFormatException ignored) {}
+                }
+                int count = Math.min(48, values.size());
+                float[] sampled = new float[count];
+                for (int i = 0; i < count; i++) {
+                    sampled[i] = values.get(count == 1 ? 0 :
+                        Math.round(i * (values.size() - 1f) / (count - 1f)));
+                }
+                cache.values = sampled;
+                changed();
+            }
+        } catch (Exception ignored) {
+            // History is optional and never allowed to break the live dashboard.
         }
     }
 

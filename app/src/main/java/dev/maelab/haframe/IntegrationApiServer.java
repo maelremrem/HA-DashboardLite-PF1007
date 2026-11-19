@@ -38,6 +38,8 @@ final class IntegrationApiServer {
     static final String ACTION_DISPLAY = "dev.maelab.haframe.DISPLAY_UPDATED";
     static final String ACTION_NOTIFY = "dev.maelab.haframe.NOTIFY";
     static final String ACTION_WAKE = "dev.maelab.haframe.WAKE";
+    static final String ACTION_RELOAD = "dev.maelab.haframe.RELOAD";
+    private static volatile long lastScreenshotAt;
     static final int PORT = 8766;
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile IntegrationApiServer current;
@@ -245,7 +247,32 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("GET".equals(req.method) && "/api/v1/status".equals(req.path)) {
+                if ("GET".equals(req.method) && "/api/v1/logs".equals(req.path)) {
+                    send(out, 200, new JSONObject().put("events", DiagnosticLog.snapshot()));
+                } else if ("GET".equals(req.method) && "/api/v1/screenshot".equals(req.path)) {
+                    long now = SystemClock.elapsedRealtime();
+                    synchronized (IntegrationApiServer.class) {
+                        if (now - lastScreenshotAt < 5000L) {
+                            send(out, 400, new JSONObject().put("error", "Screenshot cooldown"));
+                            return;
+                        }
+                        lastScreenshotAt = now;
+                    }
+                    try {
+                        send(out, 200, new JSONObject().put("format", "image/jpeg")
+                            .put("width", 640).put("height", 400)
+                            .put("data", DashboardSnapshot.capture()));
+                    } catch (Exception ignored) {
+                        send(out, 400, new JSONObject().put("error", "Screenshot unavailable"));
+                    }
+                } else if ("POST".equals(req.method) && "/api/v1/reload".equals(req.path)) {
+                    JSONObject request = new JSONObject(req.body);
+                    if (!"reload_dashboard".equals(request.optString("action"))) {
+                        throw new IllegalArgumentException("Explicit reload action required");
+                    }
+                    context.sendBroadcast(new Intent(ACTION_RELOAD).setPackage(context.getPackageName()));
+                    send(out, 200, new JSONObject().put("ok", true));
+                } else if ("GET".equals(req.method) && "/api/v1/status".equals(req.path)) {
                     JSONObject data = DisplayPrefs.load(context).toJson();
                     JSONObject diagnostics = DeviceDiagnostics.snapshot(context);
                     for (Iterator<String> keys = diagnostics.keys(); keys.hasNext();) {
@@ -261,13 +288,16 @@ final class IntegrationApiServer {
                     FrameConfig config = FrameConfig.load(context);
                     send(out, 200, new JSONObject().put("dashboard_title", config.title)
                         .put("custom_css", config.customCss).put("pages", config.pagesJson())
+                        .put("slideshow", config.slideshow)
                         .put("display", DisplayPrefs.load(context).toJson()));
                 } else if ("POST".equals(req.method) && "/api/v1/config".equals(req.path)) {
                     JSONObject body = new JSONObject(req.body);
                     DisplayPrefs display = DisplayPrefs.load(context);
                     if (body.has("display")) display.update(body.getJSONObject("display"));
                     FrameConfig frame = FrameConfig.load(context);
-                    boolean layout = body.has("pages") || body.has("dashboard_title") || body.has("custom_css");
+                    boolean layout = body.has("pages") || body.has("dashboard_title") ||
+                        body.has("custom_css") || body.has("slideshow");
+                    if (body.has("slideshow")) frame.setSlideshow(body.getJSONObject("slideshow"));
                     if (body.has("pages")) frame.setPages(body.getJSONArray("pages"));
                     if (body.has("custom_css")) {
                         frame.customCss = body.getString("custom_css");

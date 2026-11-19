@@ -1,10 +1,78 @@
 /* HA Frame visual editor - bundled with the Home Assistant integration. */
-const CARD_VERSION = "1.5.0";
+const CARD_VERSION = "2.1.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
   ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"],
-  ["weather", "Météo"], ["graph", "Courbe"], ["camera", "Caméra (MJPEG)"]
+  ["weather", "Météo"], ["graph", "Courbe"], ["camera", "Caméra (MJPEG)"],
+  ["calendar", "Calendrier"], ["todo", "Tâches"], ["bambu", "Bambu Lab"],
+  ["energy", "Énergie"], ["air_quality", "Qualité de l’air"], ["presence", "Présence"],
+  ["circular_gauge", "Jauge circulaire"], ["history", "Historique (1h/24h/7j)"]
 ];
+const RULE_OPERATORS = [
+  ["equals", "Égal à"], ["not_equals", "Différent de"], ["above", "Supérieur à"],
+  ["below", "Inférieur à"], ["on", "Actif"], ["off", "Inactif"], ["time_between", "Plage horaire"]
+];
+const TAP_ACTIONS = [
+  ["default", "Action par défaut"], ["none", "Aucune"], ["page_next", "Page suivante"],
+  ["page_prev", "Page précédente"], ["settings", "Réglages"],
+  ["camera_fullscreen", "Caméra plein écran"]
+];
+const LONG_PRESS_ACTIONS = [
+  ["none", "Aucune"], ["toggle", "Activer l’entité"], ["page_next", "Page suivante"],
+  ["settings", "Réglages"]
+];
+const RULE_ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
+function checkRule(rule, visual = true) {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return "Règle invalide";
+  const keys = ["entity_id","operator","value",...(visual?["hide","background"]:[])];
+  if (Object.keys(rule).some(k=>!keys.includes(k))) return "Option de règle interdite";
+  if (rule.operator!=="time_between" && !RULE_ENTITY_RE.test(rule.entity_id||"")) return "Entité de condition invalide";
+  if (rule.operator==="time_between" && rule.entity_id &&
+      !RULE_ENTITY_RE.test(rule.entity_id)) return "Entité de condition invalide";
+  if (!RULE_OPERATORS.some(([key])=>key===rule.operator)) return "Opérateur invalide";
+  if (typeof rule.value !== "string" || rule.value.length>64) return "Valeur de condition invalide";
+  if (["equals","not_equals"].includes(rule.operator) && !rule.value) return "Valeur requise";
+  if (["above","below"].includes(rule.operator) && !/^-?\d{1,6}(?:\.\d{1,3})?$/.test(rule.value)) {
+    return "Seuil numérique invalide";
+  }
+  if (rule.operator==="time_between" &&
+      !/^(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d$/.test(rule.value)) {
+    return "Plage horaire invalide (HH:MM-HH:MM)";
+  }
+  if ("hide" in rule && typeof rule.hide !== "boolean") return "Masquage invalide";
+  if ("background" in rule && !/^#[0-9a-fA-F]{6}$/.test(rule.background)) return "Couleur invalide";
+  return "";
+}
+function matchesRule(rule, states) {
+  if (!rule) return false;
+  if (rule.operator==="time_between") {
+    const value=rule.value||"";
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return false;
+    const [a,b]=value.split("-");
+    const minutes=part=>Number(part.slice(0,2))*60+Number(part.slice(3,5));
+    const now=new Date(), minute=now.getHours()*60+now.getMinutes();
+    const start=minutes(a),end=minutes(b);
+    return start<=end ? minute>=start&&minute<end : minute>=start||minute<end;
+  }
+  if (!states) return false;
+  const state = states[rule.entity_id];
+  if (!state || ["unavailable","unknown"].includes(state.state)) return false;
+  const actual = String(state.state), value = rule.value || "";
+  if (rule.operator==="equals") return actual===value;
+  if (rule.operator==="not_equals") return actual!==value;
+  if (rule.operator==="on") return ["on","home"].includes(actual);
+  if (rule.operator==="off") return ["off","not_home"].includes(actual);
+  if (rule.operator==="above" || rule.operator==="below") {
+    const n=Number(actual), threshold=Number(value);
+    return Number.isFinite(n) && Number.isFinite(threshold) &&
+      (rule.operator==="above"?n>threshold:n<threshold);
+  }
+  return false;
+}
+function supportsAdvancedApk(version) {
+  const bits=String(version||"").replace(/^v/,"").match(/^(\d+)\.(\d+)\.(\d+)$/);
+  return !!(bits && (Number(bits[1])>1 || (Number(bits[1])===1 && Number(bits[2])>=2)));
+}
 const LEGACY_MDI = {
   home:"mdi:home", light:"mdi:lightbulb", thermometer:"mdi:thermometer",
   energy:"mdi:flash", water:"mdi:water", sun:"mdi:weather-sunny",
@@ -221,7 +289,7 @@ function validTileStyle(style) {
     (style.radius == null || (Number.isInteger(style.radius) && style.radius>=0 && style.radius<=72));
 }
 function isAdvancedPage(page) {
-  return page.cards.some(tile=>tile.type==="weather" || tile.type==="graph" || tile.type==="camera" ||
+  return Boolean(page.activate_when) || page.cards.some(tile=>tile.rule || tile.tap_action || tile.long_press || tile.history_hours || tile.type==="weather" || tile.type==="graph" || tile.type==="camera" ||
     (tile.col_span||1)!==1 || (tile.row_span||1)!==1 ||
     (tile.icon && tile.icon !== "none") ||
     (tile.style && Object.keys(tile.style).length>0));
@@ -326,6 +394,12 @@ const STYLE = [
   ".tile-camera{flex:1;display:grid;place-items:center;text-align:center;min-height:0;margin:1cqw 0;background:#020911;border-radius:6px;font-size:clamp(8px,1.3cqw,16px);opacity:.9;position:relative;overflow:hidden}",
   ".camera-dot{position:absolute;top:7px;left:8px;font-size:clamp(7px,.95cqw,12px);color:#ff7171}",
   ".tile-graph{width:100%;height:36%;min-height:10px;flex:1 1 auto;overflow:hidden}.tile-graph polyline{fill:none;stroke:currentColor;stroke-width:3;vector-effect:non-scaling-stroke}",
+  ".tile-circle{width:70%;height:48%;margin:auto;flex:1 1 auto;overflow:hidden}",
+  ".diagnostics{display:grid;gap:0}.diagnostic-row{display:flex;gap:12px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--divider-color,#ddd);font-size:12px}.diagnostic-row strong{font-size:12px;text-align:right;overflow-wrap:anywhere}.diagnostic-screenshot{width:100%;max-width:640px;height:auto;margin-top:12px;border:1px solid var(--divider-color,#ddd);border-radius:8px}",
+  ".device-log{max-height:200px;overflow:auto;font:11px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;background:var(--secondary-background-color,#f2f3f5);padding:10px;border-radius:7px}",
+
+
+
   ".bar{flex:0 0 auto;height:clamp(2px,.45cqw,6px);background:#ffffff2c;border-radius:99px;overflow:hidden}.bar>i{display:block;height:100%;background:#67dbba;border-radius:inherit}",
   ".inspector{padding:17px 18px;border-left:1px solid var(--divider-color,#ddd);min-width:0}",
   ".inspector-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}",
@@ -417,6 +491,11 @@ class HaFrameVisualEditor extends HTMLElement {
     this._historyGroup = "";
     this._historyGroupAt = 0;
     this._styleClipboard = null;
+    this._profiles = [];
+    this._snapshots = [];
+    this._deviceStatus = null;
+    this._screenshot = "";
+    this._deviceEvents = [];
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -561,6 +640,8 @@ class HaFrameVisualEditor extends HTMLElement {
     const requestId = (this._loadSequence || 0) + 1;
     this._loadSequence = requestId;
     this._config = null;
+    this._deviceStatus = null;
+    this._screenshot = "";
     this._history = [];
     this._historyIndex = -1;
     this._revision = "";
@@ -604,6 +685,10 @@ class HaFrameVisualEditor extends HTMLElement {
       this._frameOptions() + "</select><button data-action='reload' title='Relire la configuration du cadre'>↻ Actualiser</button></div></div>" +
       "<div class='row toolbar'>" +
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
+      "<button data-action='photos'>Photos / Veille</button>" +
+      "<button data-action='profiles'>Profils / Sauvegardes</button>" +
+      "<button data-action='device'>Diagnostic</button>" +
+      "<button data-action='updates'>Mises à jour</button>" +
       "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
       "<button data-action='undo' title='Annuler (Ctrl/Cmd+Z)' aria-label='Annuler la dernière modification'" +
@@ -618,7 +703,12 @@ class HaFrameVisualEditor extends HTMLElement {
       "<div class='hint' style='margin-top:9px'>Simulation du rendu Canvas Android. Les états affichés viennent de Home Assistant ; aucun appareil n’est actionné depuis cet aperçu.</div></div>" +
       "<aside class='inspector' data-inspector></aside></div>" +
       "<div class='footer'><div class='row'>" +
-      (cloneOptions ? "<label class='muted'>Copier la config d’un autre cadre :</label><select data-control='source'>" + cloneOptions + "</select><button class='btn-small' data-action='clone'>Copier</button>" : "<span class='muted'>Chaque cadre conserve sa configuration indépendante.</span>") +
+      (cloneOptions ? "<label class='muted'>Copier depuis un autre cadre :</label><select data-control='source'>" +
+        cloneOptions + "</select><select data-control='clone-mode'>" +
+        option("all","Tout","all") + option("theme","Thème uniquement","") +
+        option("pages","Pages uniquement","") + "</select>" +
+        "<button class='btn-small' data-action='clone'>Copier</button>" :
+        "<span class='muted'>Chaque cadre conserve sa configuration indépendante.</span>") +
       "</div><div class='row'><span class='status" + (this._error ? " error" : "") + "' data-notice>" +
       esc(this._notice || (this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre")) +
       "</span><button data-action='discard' title='Relire le cadre et perdre les modifications locales'>Recharger le cadre</button><button class='primary' data-action='save'" +
@@ -695,22 +785,49 @@ class HaFrameVisualEditor extends HTMLElement {
       } else if (tile.type === "camera") {
         value = "Caméra";
         hint = tile.entity_id ? "Flux MJPEG depuis Home Assistant · 1 image/s" : "Choisir une entité camera.*";
+      } else if (tile.type === "calendar") {
+        value = attrs.message || raw;
+        hint = attrs.start_time || "Prochain événement";
+      } else if (tile.type === "todo") {
+        value = raw === "—" ? "—" : raw + " tâches";
+        hint = "Liste Home Assistant";
+      } else if (tile.type === "bambu") {
+        value = raw;
+        percent = Number.isFinite(Number(attrs.progress)) ? Number(attrs.progress) : null;
+        hint = attrs.remaining_time || attrs.friendly_name || "Imprimante 3D";
+      } else if (["energy","air_quality"].includes(tile.type)) {
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+      } else if (tile.type === "presence") {
+        value = ["home","on"].includes(raw) ? "Présent" : raw === "—" ? "—" : "Absent";
+        hint = attrs.friendly_name || tile.entity_id;
+      } else if (tile.type === "circular_gauge") {
+        const n=Number(raw), low=Number(tile.min || 0), high=Number(tile.max==null?100:tile.max);
+        percent=raw!=="—" && Number.isFinite(n) && high>low ? Math.max(0,Math.min(100,100*(n-low)/(high-low))) : 0;
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+      } else if (tile.type === "history") {
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+        hint = "Historique " + (tile.history_hours || 24) + "h récupéré sur le PF1007";
       }
       const slot = tile.type === "metric"
         ? ".metric-" + page.cards.slice(0,i+1).filter(t=>t.type==="metric").length
         : ".control-" + page.cards.slice(0,i+1).filter(t=>t.type!=="metric").length;
       const individual = tile.style || {};
+      const conditionTrue = matchesRule(tile.rule, states);
+      const hidden = conditionTrue && tile.rule && tile.rule.hide;
+      const conditionalBackground = conditionTrue && tile.rule && tile.rule.background || "";
       const tileCss = css(".card", "." + tile.type, slot, isOn ? ".control.on" : "");
       const labelCss = css(".metric-label", "." + tile.type, slot);
       const valueCss = css(".metric-value", "." + tile.type, slot);
       const custom = [
-        individual.background ? "background-color:" + individual.background : "",
+        conditionalBackground ? "background-color:" + conditionalBackground : 
+          individual.background ? "background-color:" + individual.background : "",
         individual.foreground ? "color:" + individual.foreground : "",
         Number.isInteger(individual.radius) ? "border-radius:" + individual.radius*scale + "px" : ""
       ].filter(Boolean).join(";");
       const labelColor = individual.foreground ? "color:" + individual.foreground : "";
       const accent = individual.accent || "#67dbba";
-      const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
+      const bar = percent == null || tile.type === "circular_gauge" ? "" :
+        "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
       const cell = layout.cells[i];
       const selected = this._tile === i;
@@ -724,17 +841,22 @@ class HaFrameVisualEditor extends HTMLElement {
             "' title='" + title + "'" + (disabled ? " disabled" : "") + ">" + symbol + "</button>").join("") +
         "</div>";
       const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
+      const ring = tile.type === "circular_gauge" ? "<svg class='tile-circle' viewBox='0 0 100 100' aria-hidden='true'>" +
+        "<circle cx='50' cy='50' r='39' stroke='#70839855' stroke-width='9' fill='none'/>" +
+        "<circle cx='50' cy='50' r='39' stroke='" + accent + "' stroke-width='9' fill='none' " +
+        "stroke-dasharray='" + (Math.max(0,Math.min(100,percent||0))*2.45).toFixed(1) + " 245' " +
+        "stroke-linecap='round' transform='rotate(-90 50 50)'/></svg>" : "";
       const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
         "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
       return "<div class='screen-tile" + (this._tile===i?" selected":"") +
         "' data-tile='" + i + "' role='button' tabindex='0' draggable='true' style='" +
-        tileCss + ";" + custom + ";grid-column:" + (cell.col+1) + " / span " + cell.w +
+        tileCss + ";" + custom + (hidden ? ";opacity:.18" : "") + ";grid-column:" + (cell.col+1) + " / span " + cell.w +
         ";grid-row:" + (cell.row+1) + " / span " + cell.h + "'>" +
         icon + "<div class='tile-label' style='" + labelCss + ";" + labelColor + "'>" +
         esc(tile.label || tile.type) + "</div>" +
         (tile.type === "camera" ? camera : "<div class='tile-value' style='" + valueCss + ";" + labelColor + "'>" +
         esc(value) + "</div>") +
-        (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
+        ring + (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
         "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div>" +
         controls + "</div>";
     }).join("");
@@ -797,6 +919,84 @@ class HaFrameVisualEditor extends HTMLElement {
         Object.entries(TYPOGRAPHY).map(([id,p])=>option(id,p.label,readTypography(this._config.custom_css))).join("") +
         "</select></label>" +
         "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
+    } else if (this._panel === "device" || this._panel === "updates") {
+      const values = this._deviceStatus || {};
+      const names = {
+        version:"APK", android_version:"Android", uptime_seconds:"Uptime (s)",
+        wifi_connected:"Wi-Fi connecté", wifi_ssid:"SSID", wifi_ip:"Adresse IP",
+        wifi_rssi_dbm:"Signal (dBm)", wifi_quality_percent:"Qualité (%)",
+        wifi_link_speed_mbps:"Vitesse réseau (Mbit/s)",
+        wifi_frequency_mhz:"Fréquence (MHz)", sleeping:"Veille",
+        effective_brightness:"Luminosité", lux:"Éclairement", lux_source:"Source lux",
+        signing_cert_sha256:"Empreinte de signature APK",
+        heap_used_mb:"Mémoire utilisée (Mo)",heap_max_mb:"Mémoire maximale (Mo)",
+        battery_temperature_c:"Température batterie (°C)",battery_percent:"Batterie (%)"
+      };
+      const info = Object.keys(names).filter(key=>values[key]!=null).map(key=>
+        "<div class='diagnostic-row'><span>" + esc(names[key]) + "</span><strong>" +
+        esc(values[key]) + "</strong></div>").join("");
+      html = "<div class='inspector-head'><strong>" +
+        (this._panel==="device"?"Diagnostic du cadre":"Maintenance et mises à jour") +
+        "</strong></div>" +
+        "<div class='diagnostics'>" + (info||"Aucune donnée chargée") + "</div>" +
+        "<div class='actions'><button data-action='diagnostics-refresh'>Actualiser</button>" +
+        (this._panel==="device" ?
+          "<button data-action='capture'>Capture d’écran</button>" +
+          "<button data-action='reload-dashboard'>Recharger le dashboard</button>" : "") +
+        "</div>" +
+        (this._panel==="device" && this._screenshot ?
+          "<img class='diagnostic-screenshot' alt='Capture récente du cadre' src='data:image/jpeg;base64," +
+          this._screenshot + "'>" : "") +
+        (this._panel==="device" ? "<div class='actions'><button data-action='logs-refresh'>Événements du cadre</button></div>" +
+          "<pre class='device-log'>" + esc(this._deviceEvents.join("\n")) + "</pre>" : "") +
+        (this._panel==="updates" ?
+          "<p class='hint'>Mise à jour sécurisée : vérifie l’empreinte de signature de l’APK, " +
+          "puis installe la nouvelle version depuis Fedora avec adb install -r. " +
+          "L’installation distante automatique reste désactivée tant qu’une signature stable et un mécanisme de récupération n’ont pas été validés sur l’appareil.</p>" :
+          "<p class='hint'>L’image est uniquement récupérée sur demande via le LAN authentifié, en JPEG 640×400. " +
+          "Recharger redémarre l’affichage de l’application, pas Android.</p>");
+    } else if (this._panel === "profiles") {
+      html = "<div class='inspector-head'><strong>Profils et restaurations</strong></div>" +
+        "<p class='hint'>Les profils enregistrent seulement le dashboard et le CSS, jamais les jetons Home Assistant. Appliquer un profil ne modifie pas le cadre tant que tu ne cliques pas sur Enregistrer.</p>" +
+        "<label class='field'>Nom du nouveau profil<input data-control='profile-name' maxlength='48' placeholder='Écran du salon'></label>" +
+        "<button data-action='profile-save'>Enregistrer le profil actuel</button>" +
+        "<label class='field'>Profils existants<select data-control='profile-picker'>" +
+        this._profiles.map(p=>option(p.id,p.name+" · "+p.created,"")).join("") +
+        "</select></label>" +
+        "<div class='actions'><button data-action='profile-apply'>Charger dans Studio</button>" +
+        "<button data-action='profile-delete' class='danger'>Supprimer le profil</button></div>" +
+        "<div class='inspector-head'><strong>Historique du cadre</strong></div>" +
+        "<label class='field'>Anciennes configurations<select data-control='snapshot-picker'>" +
+        this._snapshots.map(p=>option(p.revision,p.created,"")).join("") +
+        "</select></label><button data-action='snapshot-apply'>Restaurer dans Studio</button>" +
+        "<div class='inspector-head'><strong>Importer / exporter</strong></div>" +
+        "<div class='actions'><button data-action='export-layout'>Exporter JSON</button>" +
+        "<button data-action='import-layout'>Importer JSON</button></div>" +
+        "<input data-import-file type='file' accept='.json,application/json' hidden>" +
+        "<p class='hint'>Un historique de 8 versions est conservé par cadre après les enregistrements.</p>";
+    } else if (this._panel === "photos") {
+      const opts = this._config.slideshow || {
+        enabled:false,idle_seconds:300,interval_seconds:30,show_clock:true,
+        source:"local",camera_entity:""
+      };
+      html = "<div class='inspector-head'><strong>Mode photo et veille</strong></div>" +
+        "<label class='field'><span>Activer le diaporama</span><input type='checkbox' data-bind='photo-enabled'" +
+          (opts.enabled?" checked":"") + "></label>" +
+        "<label class='field'>Début après inactivité (secondes)<input type='number' data-bind='photo-idle' min='30' max='3600' value='" +
+          esc(opts.idle_seconds) + "'></label>" +
+        "<label class='field'>Intervalle (secondes)<input type='number' data-bind='photo-interval' min='5' max='300' value='" +
+          esc(opts.interval_seconds) + "'></label>" +
+        "<label class='field'>Source<select data-bind='photo-source'>" +
+          option("local","Photos locales sur le cadre",opts.source) +
+          option("camera","Caméra Home Assistant",opts.source) + option("image","Image Home Assistant",opts.source) + "</select></label>" +
+        (opts.source!=="local" ? "<label class='field'>Entité caméra ou image<input data-bind='photo-camera' " +
+          "list='ha-frame-entities' placeholder='camera.salon' value='" +
+          esc(opts.camera_entity||"") + "'></label>" : "") +
+        "<label class='field'><span>Horloge sur les photos</span><input type='checkbox' data-bind='photo-clock'" +
+          (opts.show_clock?" checked":"") + "></label>" +
+        "<p class='hint'>Photos locales : copie des JPG/PNG (maximum 6 Mo chacun) dans " +
+        "Android/data/dev.maelab.haframe/files/Pictures/HAFrame/ sur le cadre. " +
+        "Le défilement est suspendu pendant la veille noire. Source caméra : image authentifiée via HA.</p>";
     } else if (this._panel === "layouts") {
       html = "<div class='inspector-head'><strong>Modèles de disposition</strong></div>" +
         "<p class='hint'>Ajoute une page ou remplace la page actuelle. Les tuiles sont pré-remplies sans entités : associe-les ensuite à Home Assistant.</p>" +
@@ -813,7 +1013,15 @@ class HaFrameVisualEditor extends HTMLElement {
       html = "<div class='inspector-head'><strong>Page " + esc(this._page + 1) + "</strong></div>" +
         "<label class='field'>Nom<input data-bind='page-title' maxlength='32' value='" + esc(page.title) + "'></label>" +
         "<label class='field'>Colonnes<select data-bind='columns'>" + [2,3,4].map(n=>option(n,n+" colonnes",page.columns)).join("") +
-        "</select></label><p class='hint'>Entre 1 et 4 pages, jusqu’à 3 rangées par page. Les cartes peuvent être déplacées en les faisant glisser.</p>" +
+        "</select></label><p class='hint'>Entre 1 et 4 pages, jusqu’à 3 rangées par page.</p>" +
+        "<div class='inspector-head'><strong>Page automatique</strong></div>" +
+        "<label class='field'>Entité déclencheuse<input data-bind='page-auto-entity' list='ha-frame-entities' placeholder='person.maison' value='" +
+          esc(page.activate_when?.entity_id || "") + "'></label>" +
+        "<label class='field'>Condition<select data-bind='page-auto-operator'>" +
+          RULE_OPERATORS.map(([key,label])=>option(key,label,page.activate_when?.operator || "equals")).join("") + "</select></label>" +
+        "<label class='field'>Valeur attendue<input data-bind='page-auto-value' maxlength='64' placeholder='home' value='" +
+          esc(page.activate_when?.value || "") + "'></label>" +
+        "<p class='hint'>Vide = navigation manuelle. Une page conditionnelle active passe en priorité ; une navigation manuelle suspend l'automatisme pendant 2 minutes.</p>" +
         "<div class='actions'><button data-action='page-left'>← Page</button><button data-action='page-right'>Page →</button>" +
         "<button data-action='duplicate-page'>Dupliquer page</button>" +
         "<button data-action='delete-page' class='danger'>Supprimer page</button></div>";
@@ -842,9 +1050,13 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type==="camera" ? "<p class='hint'>Flux MJPEG via Home Assistant, avec repli JPEG (≈ 1 image/s). Un seul flux actif sur le cadre, sans audio. APK 1.0.0 requis.</p>" : "") +
         (tile.type==="graph" ? "<p class='hint'>Courbe des 24 derniers changements de valeur depuis la connexion du cadre ; sans historique permanent.</p>" : "") +
         (tile.type==="weather" ? "<p class='hint'>Utilise une entité météo Home Assistant : weather.*</p>" : "") +
-        (tile.type === "gauge" ? "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
+        (["gauge","circular_gauge"].includes(tile.type) ?
+          "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
           esc(tile.max) + "'></label></div>" : "") +
+        (tile.type==="history" ? "<label class='field'>Fenêtre d’historique<select data-bind='history-hours'>" +
+          [1,24,168].map(n=>option(n,n===1?"1 heure":n===24?"24 heures":"7 jours",tile.history_hours||24)).join("") +
+          "</select></label><p class='hint'>Historique réel via l’API HA, avec limitation des données côté Android.</p>" : "") +
         "<div class='inspector-head'><strong>Icône Home Assistant</strong></div>" +
         "<label class='field'>Icône MDI (vide = icône de l’entité)<input data-bind='card-icon' " +
         "list='ha-frame-mdi' maxlength='96' placeholder='mdi:lightbulb' value='" +
@@ -870,6 +1082,28 @@ class HaFrameVisualEditor extends HTMLElement {
         "<div class='tile-style-grid'>" + appearance + "</div>" +
         "<label class='field'>Rayon des angles (px ; vide = thème)<input data-bind='style-radius' type='number' min='0' max='72' placeholder='Par défaut' value='" +
         esc(radius) + "'></label>" +
+        "<div class='inspector-head'><strong>Interactions tactiles</strong></div>" +
+        "<label class='field'>Appui court<select data-bind='tap-action'>" +
+        TAP_ACTIONS.map(([key,label])=>option(key,label,tile.tap_action||"default")).join("") +
+        "</select></label>" +
+        "<label class='field'>Appui long (650 ms)<select data-bind='long-press'>" +
+        LONG_PRESS_ACTIONS.map(([key,label])=>option(key,label,tile.long_press||"none")).join("") +
+        "</select></label>" +
+        "<div class='inspector-head'><strong>Condition de tuile</strong></div>" +
+        "<label class='field'>Entité de condition<input data-bind='rule-entity' list='ha-frame-entities' placeholder='sensor.temperature' value='" +
+          esc(tile.rule?.entity_id||"") + "'></label>" +
+        "<label class='field'>Opérateur<select data-bind='rule-operator'>" +
+        RULE_OPERATORS.map(([key,label])=>option(key,label,tile.rule?.operator||"above")).join("") + "</select></label>" +
+        "<label class='field'>Valeur<input data-bind='rule-value' maxlength='64' placeholder='25' value='" +
+          esc(tile.rule?.value||"") + "'></label>" +
+        "<label class='field'>Si vrai : <select data-bind='rule-hide'>" +
+        option("false","Afficher et appliquer la couleur",String(Boolean(tile.rule?.hide))) +
+        option("true","Masquer la tuile",String(Boolean(tile.rule?.hide))) +
+        "</select></label>" +
+        "<label class='field'>Couleur si vrai<input type='color' data-bind='rule-background' value='" +
+          esc(tile.rule?.background||"#ad4c43") + "'></label>" +
+        "<p class='hint'>La condition est évaluée localement sur le cadre. La place d’une tuile masquée reste réservée dans la grille.</p>" +
+        "<div class='actions'><button data-action='clear-tile-rule'>Effacer la condition</button></div>" +
         "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button>" +
         "<button data-action='copy-tile-style'>Copier le style</button>" +
         "<button data-action='paste-tile-style'" + (this._styleClipboard === null || this._styleClipboard === undefined ? " disabled" : "") +
@@ -926,6 +1160,11 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (target.dataset.importFile !== undefined) {
+      this._importFile(target.files && target.files[0]);
+      target.value = "";
+      return;
+    }
     if (this._busy) {
       if (target.dataset.control === "frame") target.value = this._frameId;
       return;
@@ -953,7 +1192,9 @@ class HaFrameVisualEditor extends HTMLElement {
       }
       return;
     }
-    if (["columns","card-type","card-icon","card-colspan","card-rowspan"].includes(target.dataset.bind)) {
+    if (["columns","card-type","card-icon","card-colspan","card-rowspan",
+      "page-auto-operator","tap-action","long-press","history-hours",
+      "rule-operator","rule-hide","photo-enabled","photo-clock","photo-source"].includes(target.dataset.bind)) {
       this._input(event);
       this._inspector();
     }
@@ -963,9 +1204,33 @@ class HaFrameVisualEditor extends HTMLElement {
     const target = event.target, bind = target.dataset.bind;
     if (!bind || bind === "preset" || !this._config) return;
     const page = this._pageObject(), tile = this._tileObject();
+    if (bind.startsWith("photo-")) {
+      const options = this._config.slideshow ||= {
+        enabled:false,idle_seconds:300,interval_seconds:30,
+        show_clock:true,source:"local",camera_entity:""
+      };
+      if (bind === "photo-enabled") options.enabled = target.checked;
+      if (bind === "photo-clock") options.show_clock = target.checked;
+      if (bind === "photo-idle") options.idle_seconds = Number(target.value);
+      if (bind === "photo-interval") options.interval_seconds = Number(target.value);
+      if (bind === "photo-source") options.source = target.value;
+      if (bind === "photo-camera") options.camera_entity = target.value.trim();
+      this._mark();
+      this._preview();
+      return;
+    }
     if (bind === "title") this._config.dashboard_title = target.value;
     else if (bind === "css") this._config.custom_css = target.value;
     else if (bind === "page-title") page.title = target.value;
+    else if (bind.startsWith("page-auto-")) {
+      const prop = bind.slice("page-auto-".length);
+      const next = {...(page.activate_when || {entity_id:"",operator:"equals",value:""})};
+      if (prop === "entity") next.entity_id = target.value.trim();
+      if (prop === "operator") next.operator = target.value;
+      if (prop === "value") next.value = target.value;
+      if (!next.entity_id && next.operator!=="time_between") delete page.activate_when;
+      else page.activate_when = next;
+    }
     else if (bind === "columns") {
       const cols = Number(target.value), previous = page.columns;
       page.columns = cols;
@@ -982,6 +1247,20 @@ class HaFrameVisualEditor extends HTMLElement {
       if (bind === "card-entity") tile.entity_id = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
+      if (bind === "history-hours") tile.history_hours = Number(target.value);
+      if (bind === "tap-action") tile.tap_action = target.value;
+      if (bind === "long-press") tile.long_press = target.value;
+      if (bind.startsWith("rule-")) {
+        const prop = bind.slice(5);
+        const next = {...(tile.rule || {entity_id:"",operator:"above",value:"25",hide:false})};
+        if (prop === "entity") next.entity_id = target.value.trim();
+        if (prop === "operator") next.operator = target.value;
+        if (prop === "value") next.value = target.value;
+        if (prop === "hide") next.hide = target.value === "true";
+        if (prop === "background") next.background = target.value;
+        if (!next.entity_id && next.operator!=="time_between") delete tile.rule;
+        else tile.rule = next;
+      }
       if (bind === "card-icon") {
         tile.icon = target.value.trim().toLowerCase();
         delete tile.icon_path;
@@ -1103,11 +1382,27 @@ class HaFrameVisualEditor extends HTMLElement {
     if (!cfg.dashboard_title.trim() || cfg.dashboard_title.length > 28) return "Titre du dashboard : 1 à 28 caractères";
     if (cfg.custom_css.length > 12000) return "CSS : 12 000 caractères maximum";
     if (!cfg.pages.length || cfg.pages.length > 4) return "1 à 4 pages requises";
+    if (cfg.slideshow) {
+      const v=cfg.slideshow;
+      if (typeof v.enabled!=="boolean" || typeof v.show_clock!=="boolean" ||
+          !Number.isInteger(v.idle_seconds) || v.idle_seconds<30 || v.idle_seconds>3600 ||
+          !Number.isInteger(v.interval_seconds) || v.interval_seconds<5 || v.interval_seconds>300 ||
+          !["local","camera","image"].includes(v.source) ||
+          (v.source!=="local" && !/^(?:camera|image)\.[a-z0-9_]+$/.test(v.camera_entity||""))) {
+        return "Paramètres du diaporama invalides";
+      }
+      const active=this._frames.find(f=>f.entry_id===this._frameId);
+      if (!supportsAdvancedApk(active?.version)) return "Diaporama : APK Android v1.2.0 requis";
+    }
     for (const page of cfg.pages) {
       if (!page.title.trim() || page.title.length > 32) return "Titre de page invalide";
       if (![2,3,4].includes(page.columns) || page.cards.length > page.columns * 3) return "Trop de tuiles pour la grille";
       try { gridPlacement(page); }
       catch (error) { return error.message; }
+      if (page.activate_when) {
+        const problem = checkRule(page.activate_when, false);
+        if (problem) return "Page automatique : " + problem;
+      }
       if (page.cards.filter(tile=>tile.type==="camera").length > 1) return "Une seule caméra par page (utilise plusieurs pages)";
       for (const tile of page.cards) {
         if (!TYPES.some(([type])=>type===tile.type)) return "Type de tuile invalide";
@@ -1115,6 +1410,13 @@ class HaFrameVisualEditor extends HTMLElement {
           return "Icône invalide : utilise mdi:nom-icone";
         }
         if (tile.style && !validTileStyle(tile.style)) return "Style de tuile invalide";
+        if (tile.rule) {
+          const problem = checkRule(tile.rule, true);
+          if (problem) return "Tuile conditionnelle : " + problem;
+        }
+        if (!TAP_ACTIONS.some(([key])=>key===(tile.tap_action||"default"))) return "Action tactile invalide";
+        if (!LONG_PRESS_ACTIONS.some(([key])=>key===(tile.long_press||"none"))) return "Appui long invalide";
+        if (tile.history_hours && ![1,24,168].includes(tile.history_hours)) return "Période historique invalide";
         if (tile.type === "camera" && tile.entity_id && !tile.entity_id.startsWith("camera.")) return "Choisir une entité camera.*";
         if (tile.type === "weather" && tile.entity_id && !tile.entity_id.startsWith("weather.")) return "Choisir une entité weather.*";
         if (tile.label.length > 48) return "Titre de tuile trop long";
@@ -1125,6 +1427,12 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    if (cfg.pages.some(page=>page.activate_when || page.cards.some(tile=>
+        ["calendar","todo","bambu","energy","air_quality","presence","circular_gauge","history"].includes(tile.type) ||
+        tile.rule || tile.tap_action || tile.long_press || tile.history_hours)) &&
+        !supportsAdvancedApk(frame && frame.version)) {
+      return "Les widgets et automatismes avancés nécessitent l’APK Android v1.2.0";
+    }
     if (cfg.pages.some(page=>page.cards.some(tile=>MDI_REGEX.test(tile.icon || ""))) &&
         (!frame || !supportsMdi(frame.version))) {
       return "Les icônes mdi: nécessitent l’APK Android v1.1.0 ou supérieur";
@@ -1218,6 +1526,152 @@ class HaFrameVisualEditor extends HTMLElement {
       this._message("Enregistrement impossible : " + (error.message || error), true);
     } finally {this._busy = false;}
   }
+  async _loadLibrary() {
+    const frameId = this._frameId;
+    try {
+      const [profiles, snapshots] = await Promise.all([
+        this._hass.callWS({type:"ha_frame/editor/profiles"}),
+        this._hass.callWS({type:"ha_frame/editor/snapshots",entry_id:frameId})
+      ]);
+      this._profiles = profiles.profiles || [];
+      if (frameId === this._frameId) this._snapshots = snapshots.snapshots || [];
+      if (this._panel === "profiles") this._render();
+    } catch (error) {
+      this._message("Bibliothèque indisponible : " + (error.message||error),true);
+    }
+  }
+  _applyLibraryConfig(candidate) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
+        !["dashboard_title","custom_css","pages"].every(k=>Object.hasOwn(candidate,k)) ||
+        Object.keys(candidate).some(k=>!["dashboard_title","custom_css","pages","slideshow"].includes(k))) {
+      this._message("Fichier de dashboard invalide",true);return;
+    }
+    const current=this._config;
+    this._config=clone(candidate);
+    const problem=this._validate();
+    if (problem) {
+      this._config=current;
+      this._message("Configuration refusée : "+problem,true);
+      return;
+    }
+    this._page=0;this._tile=-1;this._panel="page";
+    this._mark();this._render();
+  }
+  async _importFile(file) {
+    if (!file) return;
+    if (file.size>131072) return this._message("Fichier trop volumineux (128 Ko maximum)",true);
+    try {
+      const config=JSON.parse(await file.text());
+      if (this._dirty && !confirm("Remplacer les modifications locales non enregistrées ?")) return;
+      this._applyLibraryConfig(config);
+    } catch (error) {
+      this._message("Import JSON invalide : "+(error.message||error),true);
+    }
+  }
+  _exportLayout() {
+    const data=JSON.stringify(this._config,null,2);
+    const blob=new Blob([data],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;
+    link.download="ha-frame-layout-"+this._frameId.replace(/[^a-z0-9_-]/gi,"")+".json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+  async _refreshDiagnostics() {
+    const frameId=this._frameId;
+    try {
+      const result=await this._hass.callWS({type:"ha_frame/editor/diagnostics",entry_id:frameId});
+      if (frameId===this._frameId) {
+        this._deviceStatus=result.diagnostics||{};
+        if (["device","updates"].includes(this._panel)) this._render();
+      }
+    } catch(error) {
+      this._message("Diagnostic indisponible : "+(error.message||error),true);
+    }
+  }
+  async _deviceAction(action) {
+    if (action==="diagnostics-refresh") return this._refreshDiagnostics();
+    if (action==="logs-refresh") {
+      try {
+        const frameId=this._frameId;
+        const response=await this._hass.callWS({type:"ha_frame/editor/logs",entry_id:frameId});
+        if (frameId===this._frameId) {
+          this._deviceEvents=(response.events||[]).slice(-60).map(String);
+          this._render();
+        }
+      } catch(error) { this._message("Journal indisponible : "+(error.message||error),true); }
+      return;
+    }
+    if (action==="capture") {
+      const frameId=this._frameId;
+      try {
+        const response=await this._hass.callWS({type:"ha_frame/editor/screenshot",entry_id:frameId});
+        if (frameId!==this._frameId) return;
+        const data=response.data||"";
+        if (response.format!=="image/jpeg" || data.length>320000 ||
+            !/^[A-Za-z0-9+/=]+$/.test(data)) throw new Error("Capture non valide");
+        this._screenshot=data;
+        this._render();
+      } catch(error) {
+        this._message("Capture indisponible : "+(error.message||error),true);
+      }
+      return;
+    }
+    if (action==="reload-dashboard") {
+      if (!confirm("Recharger l’affichage de ce cadre ? Le cadre sera brièvement indisponible.")) return;
+      try {
+        await this._hass.callWS({type:"ha_frame/editor/reload",
+          entry_id:this._frameId,confirmation:"reload_dashboard"});
+        this._message("Demande de rechargement envoyée",false);
+      } catch(error) {
+        this._message("Rechargement refusé : "+(error.message||error),true);
+      }
+    }
+  }
+  async _libraryAction(action) {
+    try {
+      if (action === "import-layout") {
+        this.shadowRoot.querySelector("[data-import-file]")?.click();
+        return;
+      }
+      if (action === "export-layout") {this._exportLayout();return;}
+      if (action === "profile-save") {
+        const name=this.shadowRoot.querySelector("[data-control='profile-name']")?.value.trim();
+        if (!name) return this._message("Donne un nom au profil",true);
+        const error=this._validate();
+        if (error) return this._message(error,true);
+        const config=await this._prepareMdiConfig();
+        await this._hass.callWS({type:"ha_frame/editor/profile_save",name,config});
+        this._message("Profil enregistré",false);
+      } else if (action === "profile-apply" || action === "profile-delete") {
+        const profileId=this.shadowRoot.querySelector("[data-control='profile-picker']")?.value;
+        if (!profileId) return this._message("Aucun profil sélectionné",true);
+        if (action === "profile-delete") {
+          if (!confirm("Supprimer ce profil enregistré ?")) return;
+          await this._hass.callWS({type:"ha_frame/editor/profile_delete",profile_id:profileId});
+        } else {
+          if (this._dirty && !confirm("Remplacer les modifications locales ?")) return;
+          const result=await this._hass.callWS({type:"ha_frame/editor/profile_get",profile_id:profileId});
+          this._applyLibraryConfig(result.config);
+          return;
+        }
+      } else if (action === "snapshot-apply") {
+        const revision=this.shadowRoot.querySelector("[data-control='snapshot-picker']")?.value;
+        if (!revision) return this._message("Aucun historique sélectionné",true);
+        if (this._dirty && !confirm("Remplacer les modifications locales ?")) return;
+        const result=await this._hass.callWS({type:"ha_frame/editor/snapshot_get",
+          entry_id:this._frameId,revision});
+        this._applyLibraryConfig(result.config);
+        return;
+      }
+      await this._loadLibrary();
+    } catch(error) {
+      this._message("Bibliothèque : "+(error.message||error),true);
+    }
+  }
   async _action(action) {
     if (this._busy) return;
     if (!this._config) {
@@ -1225,6 +1679,19 @@ class HaFrameVisualEditor extends HTMLElement {
       return;
     }
     const page = this._pageObject(), tile = this._tileObject();
+    if (action === "profiles") {
+      this._panel="profiles";this._tile=-1;
+      await this._loadLibrary();this._render();return;
+    }
+    if (action==="device" || action==="updates") {
+      this._panel=action;this._tile=-1;
+      this._render();await this._refreshDiagnostics();return;
+    }
+    if (["diagnostics-refresh","capture","reload-dashboard","logs-refresh"].includes(action)) {
+      return this._deviceAction(action);
+    }
+    if (["profile-save","profile-apply","profile-delete","snapshot-apply",
+      "export-layout","import-layout"].includes(action)) return this._libraryAction(action);
     if (action === "save") return this._save();
     if (action === "undo") return this._stepHistory(-1);
     if (action === "redo") return this._stepHistory(1);
@@ -1232,7 +1699,7 @@ class HaFrameVisualEditor extends HTMLElement {
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
       return this._open();
     }
-    if (action === "appearance" || action === "css" || action === "layouts") {
+    if (action === "appearance" || action === "css" || action === "layouts" || action === "photos") {
       this._panel = action; this._tile = -1; this._render(); return;
     }
     if (action === "page-panel") {this._panel="page";this._tile=-1;this._render();return;}
@@ -1274,6 +1741,9 @@ class HaFrameVisualEditor extends HTMLElement {
       if (!tile || this._styleClipboard == null) return;
       if (Object.keys(this._styleClipboard).length) tile.style = clone(this._styleClipboard);
       else delete tile.style;
+    } else if (action === "clear-tile-rule") {
+      if (!tile) return;
+      delete tile.rule;
     } else if (action === "clear-tile-style") {
       if (!tile) return;
       delete tile.style;
@@ -1294,7 +1764,11 @@ class HaFrameVisualEditor extends HTMLElement {
       if (!source || !source.value || !confirm("Copier la configuration de ce cadre dans l’éditeur ? Rien n’est enregistré avant de cliquer sur Enregistrer.")) return;
       try {
         const result=await this._hass.callWS({type:"ha_frame/editor/get",entry_id:source.value});
-        this._config=clone(result.config);this._page=0;this._tile=-1;this._panel="page";
+        const mode=this.shadowRoot.querySelector("[data-control='clone-mode']")?.value||"all";
+        if (mode==="theme") this._config.custom_css=result.config.custom_css;
+        else if (mode==="pages") this._config.pages=clone(result.config.pages);
+        else this._config=clone(result.config);
+        this._page=0;this._tile=-1;this._panel="page";
       } catch (error) {this._message("Copie impossible : "+(error.message||error),true);return;}
     } else return;
     this._mark();this._render();

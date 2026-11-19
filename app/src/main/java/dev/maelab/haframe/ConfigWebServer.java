@@ -229,7 +229,8 @@ final class ConfigWebServer {
                     .put("custom_css", config.customCss)
                     .put("display", DisplayPrefs.load(context).toJson())
                     .put("token_set", TokenVault.hasToken(context))
-                    .put("pages", config.pagesJson()), null);
+                    .put("pages", config.pagesJson())
+                    .put("slideshow", config.slideshow), null);
             } else if ("GET".equals(req.method) && "/api/entities".equals(req.path)) {
                 json(output, 200, fetchEntities(), null);
             } else if ("POST".equals(req.method) && "/api/config".equals(req.path)) {
@@ -359,6 +360,7 @@ final class ConfigWebServer {
         CanvasTheme.parse(customCss);
         config.customCss = customCss;
         config.setPages(body.getJSONArray("pages"));
+        if (body.has("slideshow")) config.setSlideshow(body.getJSONObject("slideshow"));
         String incomingToken = body.optString("token", "").trim();
         if (!incomingToken.isEmpty()) {
             if (incomingToken.length() > 4096) throw new IllegalArgumentException("Token trop long");

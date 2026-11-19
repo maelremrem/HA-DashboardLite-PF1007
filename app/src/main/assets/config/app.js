@@ -2,6 +2,7 @@
 
 const $ = (id) => document.getElementById(id);
 let pages = [];
+let slideshow = null;
 let activePage = 0;
 let entities = [];
 let focusedCard = -1;
@@ -65,7 +66,10 @@ const actionDomains = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover
 
 const CARD_TYPES = [['metric', 'Capteur'], ['control', 'Commande'], ['gauge', 'Jauge'],
   ['thermostat', 'Thermostat'], ['light', 'Lumière / variateur'], ['cover', 'Volet / position'],
-  ['weather', 'Météo'], ['graph', 'Courbe'], ['camera', 'Caméra MJPEG']];
+  ['weather', 'Météo'], ['graph', 'Courbe'], ['camera', 'Caméra MJPEG'],
+  ['calendar','Calendrier'],['todo','Tâches'],['bambu','Bambu Lab'],
+  ['energy','Énergie'],['air_quality','Qualité de l’air'],['presence','Présence'],
+  ['circular_gauge','Jauge circulaire'],['history','Historique']];
 const ICONS = ['', 'none', 'home', 'light', 'thermometer', 'energy', 'water', 'sun',
   'cloud', 'lock', 'camera', 'chart', 'fan', 'battery', 'wifi', 'person', 'settings',
   'bell', 'door', 'plug', 'moon', 'heart'];
@@ -179,6 +183,7 @@ async function loadConfiguration() {
   for (const [id, key] of [['nightStart','night_start'], ['nightEnd','night_end'],
     ['nightLux','night_lux'], ['brightness','brightness'], ['autoMin','auto_min'],
     ['autoMax','auto_max'], ['luxEntityId','lux_entity_id']]) $(id).value = displaySettings[key] ?? '';
+  slideshow = data.slideshow || null;
   pages = data.pages || [makePage('Maison')];
   pages.forEach(page => page.cards.forEach(card => { card.min ??= 0; card.max ??= 100; }));
   activePage = 0;
@@ -475,14 +480,21 @@ async function saveConfiguration() {
       display: displaySettings,
       pages: pages.map((page) => ({
         title: page.title.trim(), columns: Number(page.columns),
+        ...(page.activate_when ? {activate_when:page.activate_when} : {}),
         cards: page.cards.map((card) => ({
           type: card.type, label: card.label.trim(), entity_id: card.entity_id.trim(), min: card.min ?? 0, max: card.max ?? 100,
           ...(card.icon ? {icon:card.icon} : {}),
+          ...(card.icon_path ? {icon_path:card.icon_path} : {}),
           ...(card.col_span ? {col_span:card.col_span} : {}),
           ...(card.row_span ? {row_span:card.row_span} : {}),
-          ...(card.style ? {style:card.style} : {})
+          ...(card.style ? {style:card.style} : {}),
+          ...(card.rule ? {rule:card.rule} : {}),
+          ...(card.history_hours ? {history_hours:card.history_hours} : {}),
+          ...(card.tap_action ? {tap_action:card.tap_action} : {}),
+          ...(card.long_press ? {long_press:card.long_press} : {})
         }))
-      }))
+      })),
+      ...(slideshow ? {slideshow} : {})
     };
     if (!payload.url) throw new Error('Adresse Home Assistant manquante');
     if (!tokenConfigured && !payload.token) throw new Error('Token Home Assistant manquant');
