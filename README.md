@@ -26,6 +26,17 @@ This release changes **only the HA integration**. The existing Android **v0.7 AP
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
+## V1.0 — Home Assistant visual editor and multiple frames
+
+**HA Frame · Studio** is a new Lovelace card bundled with the Home Assistant integration. Choose any paired PF1007 frame, see a live-state **1280×800 layout preview**, click tiles to edit properties, drag and drop to reorder, change the native CSS or theme, and save explicitly. Each frame has a separate configuration stored on that frame; no shared global layout is used.
+
+- Security: the three editor WebSocket endpoints are admin-only and expose no device credentials.
+- Reliability: the editor checks configuration revisions before saving, preventing silent overwrites.
+- Deployment: integration **v1.0.0** only, compatible with Android APK **v0.9.0**, resource added automatically on HA Lovelace storage dashboards.
+- If you run dashboards in YAML resource mode, add `/ha-frame/ha-frame-editor.js?v=1.0.0` as a module once.
+
+[Visual Studio guide](docs/visual-studio.md) · Lovelace YAML: `type: custom:ha-frame-visual-editor`.
+
 ## V0.9 — Android device diagnostics
 
 The Home Assistant **Diagnostic** panel now exposes the running Android APK version, Android OS version, device uptime since boot, Wi-Fi SSID, IP address, RSSI (dBm), estimated signal quality (%), link rate (Mbit/s), frequency (MHz), and connection status. The app's reported version is read at runtime, rather than hardcoded. Data comes from the paired frame's existing authenticated LAN endpoint and refreshes approximately every 30 seconds.
