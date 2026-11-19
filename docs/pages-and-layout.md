@@ -1,4 +1,4 @@
-# Dynamic dashboard layout — HA Frame v0.6
+# Dynamic dashboard layout — HA Frame (Android v1.0.0)
 
 The PF1007 app draws each dashboard page in native Android Canvas. The browser configuration page is used only for editing — never for dashboard rendering.
 
@@ -49,3 +49,29 @@ adb shell dumpsys meminfo dev.maelab.haframe
 ```
 
 Keep the Android 6 device isolated on a trusted IoT network. Never forward port 8765 to the Internet.
+
+
+## Advanced Canvas grid (Android v1.0.0)
+
+Each page has 2, 3 or 4 columns and at most 3 rows. A tile can span `col_span` columns (1–page width) and `row_span` rows (1 or 2). The layout engine scans left-to-right, top-to-bottom for free cells; overlapping or oversized layouts are rejected before saving. Missing span properties default to 1×1 for compatibility.
+
+Each tile optionally supports:
+
+```json
+{
+  "type": "camera",
+  "label": "Entrée",
+  "entity_id": "camera.entree",
+  "col_span": 2,
+  "row_span": 2,
+  "icon": "camera",
+  "style": {
+    "background": "#18252e",
+    "foreground": "#ffffff",
+    "accent": "#67dbba",
+    "radius": 16
+  }
+}
+```
+
+Supported new types: `weather`, `graph`, `camera`. Camera tiles only accept Home Assistant `camera.*` entity IDs; direct stream URLs are intentionally not stored in the layout. New styling is optional and per frame. 20 built-in icons are rendered as Canvas vectors with no font files or external assets.
