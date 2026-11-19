@@ -46,7 +46,7 @@ final class HaClient {
     private final AtomicInteger sequence = new AtomicInteger(1);
     private final AtomicBoolean redrawPending = new AtomicBoolean(false);
     private final Map<String, EntityState> states = new ConcurrentHashMap<>();
-    private final Map<String, ArrayDeque<Float>> trends = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ArrayDeque<Float>> trends = new ConcurrentHashMap<>();
     private final CameraFeed cameraFeed;
     private final Listener listener;
     private final String endpoint;
@@ -108,7 +108,14 @@ final class HaClient {
         try {
             float n = Float.parseFloat(value);
             if (Float.isNaN(n) || Float.isInfinite(n)) return;
-            ArrayDeque<Float> values = trends.computeIfAbsent(id, key -> new ArrayDeque<>());
+            // Android 6 (API 23) lacks Map.computeIfAbsent and may fail to load
+            // its generated lambda class when the first state update arrives.
+            ArrayDeque<Float> values = trends.get(id);
+            if (values == null) {
+                ArrayDeque<Float> created = new ArrayDeque<>();
+                ArrayDeque<Float> existing = trends.putIfAbsent(id, created);
+                values = existing == null ? created : existing;
+            }
             synchronized (values) {
                 if (!values.isEmpty() && Float.compare(values.getLast(), n) == 0) return;
                 values.addLast(n);
