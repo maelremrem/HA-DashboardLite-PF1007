@@ -999,7 +999,7 @@ class HaFrameVisualEditor extends HTMLElement {
           (root && root.querySelector("ha-svg-icon"));
         const path = primary && primary.path ||
           (nested && nested._path) || (!stateObj && element._path);
-        if (typeof path === "string" && path.length<=8192 && path[0] === "M" &&
+        if (typeof path === "string" && path.length<=8192 && /^[Mm]/.test(path) &&
             MDI_PATH_REGEX.test(path)) return path;
         await new Promise(resolve=>setTimeout(resolve,60));
       }
