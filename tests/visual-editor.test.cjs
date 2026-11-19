@@ -148,7 +148,7 @@ assert.equal(instance._config.pages.length, 4);
 assert.match(instance.lastMessage, /4 pages/);
 
 const preview = {clientWidth:640, innerHTML:"", style:"", setAttribute(name,value){this[name]=value;}};
-instance._hass = {states:{"weather.home":{state:"sunny",attributes:{temperature:20}}}};
+instance._hass = {states:{"weather.home":{entity_id:"weather.home",state:"sunny",attributes:{temperature:20}}}};
 instance._frames = [{entry_id:"frame-1",online:true,version:"1.0.0"}];
 instance._frameId = "frame-1";
 instance._page = 0;
