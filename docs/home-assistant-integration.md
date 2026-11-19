@@ -4,12 +4,12 @@
 
 - HA Frame v0.7 APK running in the foreground on PF1007, connected to Wi-Fi.
 - Home Assistant can directly reach the frame's LAN IPv4 address on port **8766**.
-- Custom integration support: copy `custom_components/ha_frame` to your Home Assistant config directory.
+- Integrate from GitHub using the [Marketplace guide](marketplace-installation.md) when the repository is public and v0.7 is on the default branch; for a private repository, use an authenticated Git checkout and copy the component.
 - Protect the local network. **The integration API uses HTTP, not HTTPS**; it is disabled by default and should not be exposed through Cloudflare, port forwarding or the public Internet.
 
 ## Install
 
-1. Copy the `custom_components/ha_frame` directory into `/config/custom_components/ha_frame` (Home Assistant config location) and restart Home Assistant.
+1. Install the component with the [GitHub/Marketplace instructions](marketplace-installation.md) (or copy `custom_components/ha_frame` to `/config/custom_components/ha_frame` and restart Home Assistant).
 2. On the PF1007, open **Settings → ACTIVER L'INTÉGRATION HA**. Tap **GÉNÉRER UN CODE DE JUMELAGE**. A six-digit code appears for 2 minutes (max 5 failed attempts).
 3. In HA: **Settings → Devices & services → Add integration → HA Frame PF1007**. Enter the PF1007 IP address (optionally `:8766`) and the pairing code.
 4. Home Assistant stores the separate device API bearer token in its config entry. The frame keeps it encrypted using Android Keystore. The existing **Home Assistant Long-Lived Access Token on the frame is never shared** with the integration.
