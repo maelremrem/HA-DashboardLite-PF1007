@@ -3,8 +3,60 @@ const CARD_VERSION = "1.5.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
   ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"],
-  ["weather", "Météo"], ["graph", "Courbe"], ["camera", "Caméra (MJPEG)"]
+  ["weather", "Météo"], ["graph", "Courbe"], ["camera", "Caméra (MJPEG)"],
+  ["calendar", "Calendrier"], ["todo", "Tâches"], ["bambu", "Bambu Lab"],
+  ["energy", "Énergie"], ["air_quality", "Qualité de l’air"], ["presence", "Présence"],
+  ["circular_gauge", "Jauge circulaire"], ["history", "Historique (1h/24h/7j)"]
 ];
+const RULE_OPERATORS = [
+  ["equals", "Égal à"], ["not_equals", "Différent de"], ["above", "Supérieur à"],
+  ["below", "Inférieur à"], ["on", "Actif"], ["off", "Inactif"]
+];
+const TAP_ACTIONS = [
+  ["default", "Action par défaut"], ["none", "Aucune"], ["page_next", "Page suivante"],
+  ["page_prev", "Page précédente"], ["settings", "Réglages"],
+  ["camera_fullscreen", "Caméra plein écran"]
+];
+const LONG_PRESS_ACTIONS = [
+  ["none", "Aucune"], ["toggle", "Activer l’entité"], ["page_next", "Page suivante"],
+  ["settings", "Réglages"]
+];
+const RULE_ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
+function checkRule(rule, visual = true) {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return "Règle invalide";
+  const keys = ["entity_id","operator","value",...(visual?["hide","background"]:[])];
+  if (Object.keys(rule).some(k=>!keys.includes(k))) return "Option de règle interdite";
+  if (!RULE_ENTITY_RE.test(rule.entity_id||"")) return "Entité de condition invalide";
+  if (!RULE_OPERATORS.some(([key])=>key===rule.operator)) return "Opérateur invalide";
+  if (typeof rule.value !== "string" || rule.value.length>64) return "Valeur de condition invalide";
+  if (["equals","not_equals"].includes(rule.operator) && !rule.value) return "Valeur requise";
+  if (["above","below"].includes(rule.operator) && !/^-?\d{1,6}(?:\.\d{1,3})?$/.test(rule.value)) {
+    return "Seuil numérique invalide";
+  }
+  if ("hide" in rule && typeof rule.hide !== "boolean") return "Masquage invalide";
+  if ("background" in rule && !/^#[0-9a-fA-F]{6}$/.test(rule.background)) return "Couleur invalide";
+  return "";
+}
+function matchesRule(rule, states) {
+  if (!rule || !states) return false;
+  const state = states[rule.entity_id];
+  if (!state || ["unavailable","unknown"].includes(state.state)) return false;
+  const actual = String(state.state), value = rule.value || "";
+  if (rule.operator==="equals") return actual===value;
+  if (rule.operator==="not_equals") return actual!==value;
+  if (rule.operator==="on") return ["on","home"].includes(actual);
+  if (rule.operator==="off") return ["off","not_home"].includes(actual);
+  if (rule.operator==="above" || rule.operator==="below") {
+    const n=Number(actual), threshold=Number(value);
+    return Number.isFinite(n) && Number.isFinite(threshold) &&
+      (rule.operator==="above"?n>threshold:n<threshold);
+  }
+  return false;
+}
+function supportsAdvancedApk(version) {
+  const bits=String(version||"").replace(/^v/,"").match(/^(\d+)\.(\d+)\.(\d+)$/);
+  return !!(bits && (Number(bits[1])>1 || (Number(bits[1])===1 && Number(bits[2])>=2)));
+}
 const LEGACY_MDI = {
   home:"mdi:home", light:"mdi:lightbulb", thermometer:"mdi:thermometer",
   energy:"mdi:flash", water:"mdi:water", sun:"mdi:weather-sunny",
@@ -221,7 +273,7 @@ function validTileStyle(style) {
     (style.radius == null || (Number.isInteger(style.radius) && style.radius>=0 && style.radius<=72));
 }
 function isAdvancedPage(page) {
-  return page.cards.some(tile=>tile.type==="weather" || tile.type==="graph" || tile.type==="camera" ||
+  return Boolean(page.activate_when) || page.cards.some(tile=>tile.rule || tile.tap_action || tile.long_press || tile.history_hours || tile.type==="weather" || tile.type==="graph" || tile.type==="camera" ||
     (tile.col_span||1)!==1 || (tile.row_span||1)!==1 ||
     (tile.icon && tile.icon !== "none") ||
     (tile.style && Object.keys(tile.style).length>0));
