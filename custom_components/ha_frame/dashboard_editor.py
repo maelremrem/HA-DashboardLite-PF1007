@@ -10,7 +10,7 @@ import re
 
 MAX_PAGES = 4
 MAX_CARDS = 12
-CARD_TYPES = ("metric", "control", "gauge", "thermostat", "light", "cover", "weather", "graph", "camera")
+CARD_TYPES = ("metric", "control", "gauge", "thermostat", "light", "cover", "weather", "graph", "camera", "calendar", "todo", "bambu", "energy", "air_quality", "presence", "circular_gauge", "history")
 CARD_ICONS = {"", "none", "home", "light", "thermometer", "energy", "water", "sun",
               "cloud", "lock", "camera", "chart", "fan", "battery", "wifi", "person",
               "settings", "bell", "door", "plug", "moon", "heart"}
