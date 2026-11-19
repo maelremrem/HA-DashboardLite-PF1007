@@ -313,6 +313,10 @@ const STYLE = [
   ".screen-grid{position:absolute;left:3.90625%;right:3.90625%;top:34.5%;height:59%;display:grid;column-gap:1.2712%;row-gap:3.178%;align-content:start;min-height:0;min-width:0}",
   ".screen-tile{box-sizing:border-box;border:1px solid transparent;min-width:0;min-height:0;border-radius:1.55cqw;padding:clamp(4px,1.25cqw,18px);background:#1b2432;display:flex;flex-direction:column;justify-content:space-between;gap:clamp(1px,.33cqw,5px);cursor:pointer;overflow:hidden;position:relative}",
   ".screen-tile:hover{border-color:#67dbbaaa}.screen-tile.selected{border-color:#5adad5;box-shadow:inset 0 0 0 1px #5adad5}",
+  ".tile-resizer{position:absolute;right:3px;bottom:3px;display:flex;gap:2px;padding:2px;background:#091523ee;border:1px solid #67dbba88;border-radius:5px;z-index:4}",
+  ".tile-resizer button{padding:2px 3px;min-width:21px;min-height:22px;border-radius:4px;color:#f5f7fb;background:#1c4151;border-color:#477784;font-size:10px;font-weight:700;line-height:1;touch-action:manipulation}",
+  ".tile-resizer button:disabled{opacity:.3}.tile-resizer button:hover:not(:disabled){background:#246579}",
+
   ".tile-label{flex:0 0 auto;font-size:clamp(8px,1.55cqw,20px);line-height:1.05;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
   ".tile-value{flex:0 1 auto;font-size:clamp(11px,2.5cqw,34px);line-height:1.1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".tile-hint{flex:0 0 auto;font-size:clamp(7px,1.15cqw,15px);line-height:1;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
@@ -418,6 +422,7 @@ class HaFrameVisualEditor extends HTMLElement {
     this.shadowRoot.addEventListener("input", (event) => this._input(event));
     this.shadowRoot.addEventListener("change", (event) => this._change(event));
     this.shadowRoot.addEventListener("dragstart", (event) => {
+      if (event.target.closest("[data-resize]")) { event.preventDefault(); return; }
       const tile = event.target.closest("[data-tile]");
       if (!tile) return;
       this._drag = Number(tile.dataset.tile);
@@ -593,9 +598,13 @@ class HaFrameVisualEditor extends HTMLElement {
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
       "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
+      "<button data-action='undo' title='Annuler (Ctrl/Cmd+Z)' aria-label='Annuler la dernière modification'" +
+      (this._historyIndex <= 0 ? " disabled" : "") + ">↶ Annuler</button>" +
+      "<button data-action='redo' title='Rétablir (Ctrl/Cmd+Maj+Z ou Ctrl/Cmd+Y)' aria-label='Rétablir la modification'" +
+      (this._historyIndex >= this._history.length-1 ? " disabled" : "") + ">↷ Rétablir</button>" +
       "<span class='spacer'></span><label>" + esc(page.cards.length) + "/" + esc(page.columns*3) + " tuiles</label></div></div>" +
       "<div class='content'><div class='canvas-area'>" +
-      "<div class='canvas-head'><strong>Aperçu du cadre</strong><span class='muted'>Clique une tuile pour la modifier · glisse pour déplacer</span></div>" +
+      "<div class='canvas-head'><strong>Aperçu du cadre</strong><span class='muted'>Clique pour modifier · glisse pour déplacer · sélectionne puis ↔/↕ pour redimensionner</span></div>" +
       "<div class='pagebar'>" + buttons + "<button data-action='add-page' class='page' title='Ajouter une page'>+ Page</button></div>" +
       "<div class='screen-wrap'><div class='screen' data-preview></div></div>" +
       "<div class='hint' style='margin-top:9px'>Simulation du rendu Canvas Android. Les états affichés viennent de Home Assistant ; aucun appareil n’est actionné depuis cet aperçu.</div></div>" +
@@ -604,7 +613,7 @@ class HaFrameVisualEditor extends HTMLElement {
       (cloneOptions ? "<label class='muted'>Copier la config d’un autre cadre :</label><select data-control='source'>" + cloneOptions + "</select><button class='btn-small' data-action='clone'>Copier</button>" : "<span class='muted'>Chaque cadre conserve sa configuration indépendante.</span>") +
       "</div><div class='row'><span class='status" + (this._error ? " error" : "") + "' data-notice>" +
       esc(this._notice || (this._dirty ? "Modifications non enregistrées" : "Synchronisé avec le cadre")) +
-      "</span><button data-action='discard'>Annuler</button><button class='primary' data-action='save'" +
+      "</span><button data-action='discard' title='Relire le cadre et perdre les modifications locales'>Recharger le cadre</button><button class='primary' data-action='save'" +
       (!this._dirty ? " disabled" : "") + ">Enregistrer sur ce cadre</button></div></div></ha-card>";
     this._preview();
     this._inspector();
@@ -696,6 +705,16 @@ class HaFrameVisualEditor extends HTMLElement {
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
       const cell = layout.cells[i];
+      const selected = this._tile === i;
+      const controls = !selected ? "" : "<div class='tile-resizer' role='group' aria-label='Dimensions de la tuile'>" +
+        [["shrink-width","↔−","Réduire la largeur",cell.w<=1],
+         ["grow-width","↔+","Augmenter la largeur",cell.w>=page.columns],
+         ["shrink-height","↕−","Réduire la hauteur",cell.h<=1],
+         ["grow-height","↕+","Augmenter la hauteur",cell.h>=2]]
+          .map(([action,symbol,title,disabled])=>"<button type='button' draggable='false' data-resize='" +
+            action + "' data-resize-index='" + i + "' aria-label='" + title +
+            "' title='" + title + "'" + (disabled ? " disabled" : "") + ">" + symbol + "</button>").join("") +
+        "</div>";
       const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
       const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
         "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
@@ -708,7 +727,8 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type === "camera" ? camera : "<div class='tile-value' style='" + valueCss + ";" + labelColor + "'>" +
         esc(value) + "</div>") +
         (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
-        "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div></div>";
+        "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div>" +
+        controls + "</div>";
     }).join("");
     const date = new Intl.DateTimeFormat("fr-FR", {weekday:"long",day:"numeric",month:"long"}).format(new Date());
     const clock = new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",minute:"2-digit"}).format(new Date());
@@ -842,7 +862,10 @@ class HaFrameVisualEditor extends HTMLElement {
         "<div class='tile-style-grid'>" + appearance + "</div>" +
         "<label class='field'>Rayon des angles (px ; vide = thème)<input data-bind='style-radius' type='number' min='0' max='72' placeholder='Par défaut' value='" +
         esc(radius) + "'></label>" +
-        "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button></div>" +
+        "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button>" +
+        "<button data-action='copy-tile-style'>Copier le style</button>" +
+        "<button data-action='paste-tile-style'" + (this._styleClipboard === null || this._styleClipboard === undefined ? " disabled" : "") +
+        ">Coller le style</button></div>" +
         "<div class='actions'><button data-action='tile-left'>← Avant</button><button data-action='tile-right'>Après →</button>" +
         "<button data-action='duplicate-tile'>Dupliquer</button>" +
         "<button data-action='delete-tile' class='danger'>Supprimer</button></div>";
