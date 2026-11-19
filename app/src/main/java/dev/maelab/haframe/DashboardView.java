@@ -62,6 +62,9 @@ final class DashboardView extends View {
     private int pageIndex;
     private int touchedCard = -1;
     private int feedbackCard = -1;
+    private String fullscreenCamera = "";
+    private long manualPageUntil;
+    private long pressedAt;
     private float startX;
     private float startY;
     private String lastCommandId = "";
@@ -85,10 +88,31 @@ final class DashboardView extends View {
         try { theme = CanvasTheme.parse(config.customCss); }
         catch (IllegalArgumentException ignored) { theme = CanvasTheme.parse(""); }
         refreshCamera();
-        invalidate();
+        refreshContext();
     }
     void setClient(HaClient client) { this.client = client; refreshCamera(); invalidate(); }
     void setSleeping(boolean sleep) { if (sleeping != sleep) { sleeping = sleep; refreshCamera(); invalidate(); } }
+    private boolean matchesRule(org.json.JSONObject rule) {
+        if (client == null || rule == null) return false;
+        HaClient.EntityState entity = client.get(rule.optString("entity_id", ""));
+        return DashboardRules.matches(rule, entity == null ? null : entity.state);
+    }
+
+    void refreshContext() {
+        if (config.pages.size() > 1 && SystemClock.elapsedRealtime() > manualPageUntil) {
+            for (int i = 0; i < config.pages.size(); i++) {
+                if (matchesRule(config.pages.get(i).activateWhen)) {
+                    if (i != pageIndex) {
+                        pageIndex = i;
+                        refreshCamera();
+                    }
+                    break;
+                }
+            }
+        }
+        invalidate();
+    }
+
     void showNotification(String title, String message, int seconds) {
         notificationTitle = title;
         notificationMessage = message;
@@ -106,6 +130,10 @@ final class DashboardView extends View {
     private void refreshCamera() {
         if (client == null) return;
         String selected = "";
+        if (!sleeping && !fullscreenCamera.isEmpty()) {
+            client.selectCamera(fullscreenCamera);
+            return;
+        }
         if (!sleeping && !config.pages.isEmpty()) {
             FrameConfig.Page page = config.pages.get(pageIndex);
             for (FrameConfig.Card card : page.cards) {
@@ -159,6 +187,10 @@ final class DashboardView extends View {
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (sleeping) { canvas.drawColor(0xFF000000); return; }
+        if (!fullscreenCamera.isEmpty()) {
+            drawCameraFullscreen(canvas);
+            return;
+        }
         canvas.drawColor(theme.color(BG, "background-color", "body"));
         scale = Math.min(getWidth() / 1280f, getHeight() / 800f);
         if (scale <= 0f) return;
@@ -191,6 +223,25 @@ final class DashboardView extends View {
         }
         if (notificationUntil > SystemClock.elapsedRealtime()) drawNotification(canvas);
         canvas.restore();
+    }
+
+    private void drawCameraFullscreen(Canvas canvas) {
+        canvas.drawColor(0xFF030A12);
+        Bitmap image = client == null ? null : client.cameraFrame(fullscreenCamera);
+        if (image != null && !image.isRecycled()) {
+            float factor = Math.min(getWidth() / (float) image.getWidth(),
+                getHeight() / (float) image.getHeight());
+            float width = image.getWidth() * factor, height = image.getHeight() * factor;
+            paint.setColor(0xFFFFFFFF);
+            paint.setFilterBitmap(true);
+            canvas.drawBitmap(image, null, new RectF(
+                (getWidth() - width) / 2f, (getHeight() - height) / 2f,
+                (getWidth() + width) / 2f, (getHeight() + height) / 2f), paint);
+        } else {
+            text(canvas, "Connexion caméra…", 32, 70, 28, TEXT, true, getWidth()-60);
+        }
+        text(canvas, "✕  Retour", 30, Math.max(43, getHeight() - 26),
+            26, 0xFFFFFFFF, true, getWidth() - 50);
     }
 
     private void drawTabs(Canvas canvas) {
@@ -321,9 +372,15 @@ final class DashboardView extends View {
         int metricNumber = 0, controlNumber = 0;
         for (int i = 0; i < page.cards.size(); i++) {
             FrameConfig.Card card = page.cards.get(i);
+            boolean matchedRule = matchesRule(card.rule);
+            if (matchedRule && card.rule.optBoolean("hide", false)) continue;
             boolean metric = "metric".equals(card.type);
             boolean actionable = !metric && !"gauge".equals(card.type) &&
-                !"graph".equals(card.type) && !"weather".equals(card.type) && !"camera".equals(card.type);
+                !"graph".equals(card.type) && !"weather".equals(card.type) && !"camera".equals(card.type) &&
+                !"history".equals(card.type) && !"circular_gauge".equals(card.type) &&
+                !"calendar".equals(card.type) && !"todo".equals(card.type) &&
+                !"bambu".equals(card.type) && !"energy".equals(card.type) &&
+                !"air_quality".equals(card.type) && !"presence".equals(card.type);
             String slot = metric ? ".metric-" + (++metricNumber) : ".control-" + (++controlNumber);
             float x = cardLeft(page, i), y = cardTop(page, i);
             float w = tileWidth(page, i), h = tileHeight(page, i);
@@ -340,7 +397,10 @@ final class DashboardView extends View {
             int accent = customColor(card.accent, theme.color(ACCENT, "color", ".accent"));
             float radius = card.radius >= 0 ? card.radius :
                 theme.size(20, "border-radius", ".card", category, slot);
-            rect(canvas, x, y, w, h, radius, customColor(card.background, background));
+            String ruleBackground = matchedRule && card.rule != null ?
+                card.rule.optString("background", "") : "";
+            rect(canvas, x, y, w, h, radius,
+                customColor(ruleBackground, customColor(card.background, background)));
             canvas.save();
             canvas.clipRect(x + 1, y + 1, x + w - 1, y + h - 1);
             String icon = card.iconPath.isEmpty() ? TileIcon.effective(card.icon, card.type) : "mdi:cached";
@@ -367,6 +427,58 @@ final class DashboardView extends View {
                     x + 20, y + 94, 35, TEXT, true, w - 40);
                 float pct = 100f * (value - card.min) / (card.max - card.min);
                 bar(canvas, x + 20, y + h - 32, w - 40, pct, accent);
+            } else if ("circular_gauge".equals(card.type)) {
+                float value = parseNumber(state.state, Float.NaN);
+                if (finite(value)) {
+                    float pct = Math.max(0, Math.min(100,
+                        100f * (value - card.min) / (card.max - card.min)));
+                    float size = Math.min(w - 56, h - 66);
+                    float diameter = Math.max(24, size * .73f);
+                    float cx = x + w / 2, cy = y + h / 2 + 15;
+                    paint.setStyle(Paint.Style.STROKE);
+                    paint.setStrokeWidth(11f);
+                    paint.setColor(0xFF3B4B5A);
+                    canvas.drawArc(new RectF(cx-diameter/2,cy-diameter/2,
+                        cx+diameter/2,cy+diameter/2), -90, 360, false, paint);
+                    paint.setColor(accent);
+                    canvas.drawArc(new RectF(cx-diameter/2,cy-diameter/2,
+                        cx+diameter/2,cy+diameter/2), -90, pct * 3.6f, false, paint);
+                    paint.setStyle(Paint.Style.FILL);
+                    text(canvas, state.state + (state.unit().isEmpty() ? "" : state.unit()),
+                        cx - diameter / 2 + 12, cy + 9, 25, foreground, true, diameter - 20);
+                }
+            } else if ("history".equals(card.type)) {
+                float[] history = client == null ? new float[0] :
+                    client.historySamples(card.entityId, card.historyHours);
+                text(canvas, state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
+                    x+20,y+78,26,foreground,true,w-40);
+                if (history.length < 2) {
+                    text(canvas, "Historique " + card.historyHours + "h en attente…",
+                        x+20,y+h-27,19,secondary,false,w-40);
+                } else {
+                    drawTrend(canvas, history, x+20,y+94,w-40,Math.max(8,h-114),accent);
+                }
+            } else if ("calendar".equals(card.type)) {
+                String event = state.attributes.optString("message", state.state);
+                String starts = state.attributes.optString("start_time", "");
+                text(canvas,event,x+20,y+91,26,foreground,true,w-40);
+                text(canvas,starts.replace('T',' '),x+20,y+h-25,18,secondary,false,w-40);
+            } else if ("todo".equals(card.type)) {
+                text(canvas,state.state + " tâches",x+20,y+94,32,foreground,true,w-40);
+                text(canvas,"Liste Home Assistant",x+20,y+h-25,18,secondary,false,w-40);
+            } else if ("bambu".equals(card.type)) {
+                text(canvas,state.state,x+20,y+90,26,foreground,true,w-40);
+                int progress = state.attributes.optInt("progress",-1);
+                if (progress >= 0) bar(canvas,x+20,y+h-34,w-40,progress,accent);
+                else text(canvas,state.attributes.optString("remaining_time",""),
+                    x+20,y+h-26,18,secondary,false,w-40);
+            } else if ("energy".equals(card.type) || "air_quality".equals(card.type)) {
+                text(canvas,state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
+                    x+20,y+h-28,34,foreground,true,w-40);
+            } else if ("presence".equals(card.type)) {
+                boolean home = "home".equals(state.state) || "on".equals(state.state);
+                rect(canvas,x+20,y+h-39,12,12,6,home ? accent : 0xFF66768D);
+                text(canvas,home?"Présent":"Absent",x+45,y+h-27,25,foreground,true,w-65);
             } else if ("camera".equals(card.type)) {
                 Bitmap frame = client == null ? null : client.cameraFrame(card.entityId);
                 if (frame != null && !frame.isRecycled()) {
@@ -450,6 +562,7 @@ final class DashboardView extends View {
 
     private void selectPage(int index) {
         if (index < 0 || index >= config.pages.size() || index == pageIndex) return;
+        manualPageUntil = SystemClock.elapsedRealtime() + 120000L;
         pageIndex = index;
         touchedCard = -1;
         feedbackCard = -1;
