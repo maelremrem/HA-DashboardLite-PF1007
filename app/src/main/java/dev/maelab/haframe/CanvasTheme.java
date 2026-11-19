@@ -18,6 +18,7 @@ final class CanvasTheme {
     private static final String SELECTORS =
         "|body|.header|.subtitle|.clock|.date|.status|.settings|.section|" +
         ".metric|.metric-label|.metric-value|.control|.control.on|.control.pressed|" +
+        ".gauge|.thermostat|.light|.cover|" +
         ".control-label|.control-state|.accent|" +
         ".metric-1|.metric-2|.metric-3|" +
         ".control-1|.control-2|.control-3|.control-4|.control-5|.control-6|" +

@@ -352,6 +352,14 @@ final class DashboardView extends View {
                 invalidate();
                 return true;
             case MotionEvent.ACTION_UP:
+                if (notificationUntil > SystemClock.elapsedRealtime() &&
+                    x >= 170 && x <= 1110 && y >= 235 && y <= 565) {
+                    notificationUntil = 0;
+                    touchedCard = -1;
+                    removeCallbacks(endNotification);
+                    invalidate();
+                    return true;
+                }
                 int selected = touchedCard;
                 touchedCard = -1;
                 invalidate();

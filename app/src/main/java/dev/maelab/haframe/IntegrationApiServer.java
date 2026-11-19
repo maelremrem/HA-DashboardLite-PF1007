@@ -199,7 +199,6 @@ final class IntegrationApiServer {
             "Content-Length: " + bytes.length + "\r\n" +
             "Cache-Control: no-store\r\n" +
             "X-Content-Type-Options: nosniff\r\n" +
-            "Access-Control-Allow-Origin: null\r\n" +
             "Connection: close\r\n\r\n";
         out.write(headers.getBytes(StandardCharsets.UTF_8));
         out.write(bytes);

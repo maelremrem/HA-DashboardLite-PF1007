@@ -21,6 +21,9 @@ public final class CanvasThemeTest {
             ".metric-12, .control-12 { font-size: 19px; }");
         check(pages.color(0, "color", ".page-tab", ".page-tab.active") == 0xFFFF00FF);
         check(pages.size(0, "border-radius", ".card") == 18);
+        CanvasTheme specialized = CanvasTheme.parse(".gauge { background-color: #123456; } .thermostat, .light, .cover { border-radius: 14px; }");
+        check(specialized.color(0, "background-color", ".gauge") == 0xFF123456);
+        check(specialized.size(0, "border-radius", ".light") == 14);
         invalid(".unknown { color: #fff; }");
         invalid(".metric { background-image: url(https://example.com/a); }");
         invalid(".metric { color: var(--missing); }");

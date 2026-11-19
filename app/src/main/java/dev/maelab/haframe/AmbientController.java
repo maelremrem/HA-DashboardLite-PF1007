@@ -28,6 +28,7 @@ final class AmbientController implements SensorEventListener {
     private DisplayPrefs prefs;
     private HaClient client;
     private float physicalLux = Float.NaN;
+    private float filteredLux = Float.NaN;
     private float currentLux = Float.NaN;
     private String source = "none";
     private int currentBrightness = -1;
@@ -86,6 +87,8 @@ final class AmbientController implements SensorEventListener {
             source = "device";
         } else if (!finite(lux)) source = "none";
         currentLux = lux;
+        if (finite(lux)) filteredLux = finite(filteredLux) ? 0.85f * filteredLux + 0.15f * lux : lux;
+        else filteredLux = Float.NaN;
         boolean inHours = prefs.nightEnabled && prefs.withinNightHours(Calendar.getInstance());
         boolean low = finite(lux) ? (sleeping ? lux < Math.max(1, prefs.nightLux * 1.5f) : lux <= prefs.nightLux)
             : prefs.timeFallback;
@@ -95,9 +98,9 @@ final class AmbientController implements SensorEventListener {
             dashboard.setSleeping(sleeping);
         }
         int target = prefs.brightness;
-        if (prefs.autoBrightness && finite(lux)) {
+        if (prefs.autoBrightness && finite(filteredLux)) {
             // Logarithmic mapping makes changes in dark rooms more noticeable.
-            double normalized = Math.log1p(Math.min(lux, 2000)) / Math.log1p(2000);
+            double normalized = Math.log1p(Math.min(filteredLux, 2000)) / Math.log1p(2000);
             target = prefs.autoMin + (int) Math.round((prefs.autoMax - prefs.autoMin) * normalized);
         }
         if (sleeping) target = 1;
