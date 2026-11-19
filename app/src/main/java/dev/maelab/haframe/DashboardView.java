@@ -174,7 +174,7 @@ final class DashboardView extends View {
             return;
         }
         if (!sleeping && photoActive &&
-            "camera".equals(config.slideshow.optString("source"))) {
+            !("local".equals(config.slideshow.optString("source")))) {
             client.selectCamera(config.slideshow.optString("camera_entity", ""));
             return;
         }
@@ -235,7 +235,7 @@ final class DashboardView extends View {
         super.onDraw(canvas);
         if (sleeping) { canvas.drawColor(0xFF000000); return; }
         if (photoActive) {
-            Bitmap image = "camera".equals(config.slideshow.optString("source")) ?
+            Bitmap image = !"local".equals(config.slideshow.optString("source")) ?
                 (client == null ? null : client.cameraFrame(config.slideshow.optString("camera_entity",""))) :
                 photos.image();
             if (image != null && !image.isRecycled()) {
