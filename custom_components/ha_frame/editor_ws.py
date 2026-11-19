@@ -252,6 +252,7 @@ DIAGNOSTIC_FIELDS = {
     "wifi_ssid", "wifi_ip", "wifi_rssi_dbm", "wifi_quality_percent",
     "wifi_link_speed_mbps", "wifi_frequency_mhz", "sleeping",
     "effective_brightness", "lux", "lux_source", "signing_cert_sha256",
+    "heap_used_mb", "heap_max_mb", "battery_temperature_c", "battery_percent",
 }
 
 
