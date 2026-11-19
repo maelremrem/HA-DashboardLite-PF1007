@@ -58,18 +58,22 @@ final class HaClient {
     private volatile boolean receivedStateSnapshot = false;
     private String lastStatusMessage = null;
     private boolean lastStatusConnected = false;
-    private final Runnable redraw = () -> {
+    private final Runnable redraw = this::dispatchRedraw;
+    private final Runnable reconnect = this::connect;
+    private final Runnable snapshotFallback = this::runSnapshotFallback;
+
+    private void dispatchRedraw() {
         redrawPending.set(false);
         if (!stopped) listener.onStatesChanged();
-    };
-    private final Runnable reconnect = this::connect;
-    private final Runnable snapshotFallback = () -> {
+    }
+
+    private void runSnapshotFallback() {
         if (!stopped && authenticated && !receivedStateSnapshot && getStatesId == -1 && entities.length > 0) {
             status("Chargement des entités (mode compatible)…", true);
             try { startClassicSubscription(); }
             catch (Exception ignored) {}
         }
-    };
+    }
 
     private void startClassicSubscription() throws Exception {
         if (fallbackSubscriptionId != -1) return;
