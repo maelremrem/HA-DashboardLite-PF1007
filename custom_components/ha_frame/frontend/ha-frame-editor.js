@@ -316,6 +316,7 @@ const STYLE = [
   ".theme-sample{display:flex;align-items:center;gap:7px;height:50px;border-radius:8px;padding:8px;background:var(--sample-bg,#10151e);color:var(--sample-text,#fff)}",
   ".theme-sample i{display:block;width:27px;height:28px;border-radius:7px;background:var(--sample-card,#1b2432);border-left:5px solid var(--sample-accent,#67dbba)}",
   ".theme-choice span{font-size:12px;font-weight:600}",
+  ".tile-style-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.tile-style-grid input{min-width:0;padding:1px;height:36px}",
   ".layout-gallery{display:grid;gap:8px;margin:14px 0}",
   ".layout-choice{padding:12px;border:1px solid var(--divider-color,#ddd);border-radius:10px}",
   ".layout-choice strong{font-size:13px}.layout-choice .actions{margin-top:8px}",
@@ -687,19 +688,44 @@ class HaFrameVisualEditor extends HTMLElement {
         "<button data-action='duplicate-page'>Dupliquer page</button>" +
         "<button data-action='delete-page' class='danger'>Supprimer page</button></div>";
     } else {
+      const styleValues = tile.style || {};
+      const radius = Number.isInteger(styleValues.radius) ? styleValues.radius : "";
+      const appearance = [
+        ["background","Fond", "#1b2432"],
+        ["foreground","Texte", "#f5f7fb"],
+        ["accent","Accent", "#67dbba"]
+      ].map(([key,label,fallback]) =>
+        "<label class='field'>" + label + " <input data-bind='style-" + key +
+        "' type='color' value='" + esc(styleValues[key] || fallback) +
+        "'></label>").join("");
       html = "<div class='inspector-head'><strong>Tuile " + (this._tile + 1) + "</strong>" +
         "<button class='btn-small' data-action='page-panel'>Éditer la page</button></div>" +
         "<label class='field'>Type<select data-bind='card-type'>" +
         TYPES.map(([type,name])=>option(type,name,tile.type)).join("") + "</select></label>" +
         "<label class='field'>Nom de la tuile<input data-bind='card-label' maxlength='48' value='" +
         esc(tile.label) + "'></label>" +
-        "<label class='field'>Entité Home Assistant<input data-bind='card-entity' list='ha-frame-entities' placeholder='sensor.temperature' value='" +
-        esc(tile.entity_id) + "'><datalist id='ha-frame-entities'>" +
+        "<label class='field'>Entité Home Assistant<input data-bind='card-entity' list='ha-frame-entities' placeholder='" +
+        (tile.type==="camera" ? "camera.salon" : tile.type==="weather" ? "weather.maison" : "sensor.temperature") +
+        "' value='" + esc(tile.entity_id) + "'><datalist id='ha-frame-entities'>" +
         Object.keys(this._hass && this._hass.states || {}).slice(0,2000).map(id=>"<option value='" + esc(id) +
         "'></option>").join("") + "</datalist></label>" +
+        (tile.type==="camera" ? "<p class='hint'>Flux MJPEG via Home Assistant, avec repli JPEG (≈ 1 image/s). Un seul flux actif sur le cadre, sans audio. APK 1.0.0 requis.</p>" : "") +
+        (tile.type==="graph" ? "<p class='hint'>Courbe des 24 derniers changements de valeur depuis la connexion du cadre ; sans historique permanent.</p>" : "") +
+        (tile.type==="weather" ? "<p class='hint'>Utilise une entité météo Home Assistant : weather.*</p>" : "") +
         (tile.type === "gauge" ? "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
           esc(tile.max) + "'></label></div>" : "") +
+        "<label class='field'>Icône<select data-bind='card-icon'>" +
+        ICON_OPTIONS.map(([id,name])=>option(id,name,tile.icon || "")).join("") + "</select></label>" +
+        "<div class='row'><label class='field' style='flex:1'>Largeur<select data-bind='card-colspan'>" +
+        Array.from({length:page.columns},(_,i)=>option(i+1,(i+1)+" colonne"+(i?"s":""),tile.col_span||1)).join("") +
+        "</select></label><label class='field' style='flex:1'>Hauteur<select data-bind='card-rowspan'>" +
+        [1,2].map(n=>option(n,n+" rangée"+(n>1?"s":""),tile.row_span||1)).join("") + "</select></label></div>" +
+        "<div class='inspector-head'><strong>Apparence individuelle</strong></div>" +
+        "<div class='tile-style-grid'>" + appearance + "</div>" +
+        "<label class='field'>Rayon des angles (px ; vide = thème)<input data-bind='style-radius' type='number' min='0' max='72' placeholder='Par défaut' value='" +
+        esc(radius) + "'></label>" +
+        "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button></div>" +
         "<div class='actions'><button data-action='tile-left'>← Avant</button><button data-action='tile-right'>Après →</button>" +
         "<button data-action='duplicate-tile'>Dupliquer</button>" +
         "<button data-action='delete-tile' class='danger'>Supprimer</button></div>";
