@@ -15,6 +15,25 @@ CARD_ICONS = {"", "none", "home", "light", "thermometer", "energy", "water", "su
               "cloud", "lock", "camera", "chart", "fan", "battery", "wifi", "person",
               "settings", "bell", "door", "plug", "moon", "heart"}
 ENTITY_ID = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
+MDI_ICON = re.compile(r"^mdi:[a-z0-9]+(?:-[a-z0-9]+)*$")
+MDI_PATH = re.compile(r"^[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\s-]+$")
+MAX_MDI_PATH = 8192
+
+
+def validate_icon(card: dict) -> None:
+    icon = card.get("icon", "")
+    path = card.get("icon_path", "")
+    if not isinstance(icon, str) or not (icon in CARD_ICONS or MDI_ICON.fullmatch(icon)):
+        raise ValueError("Icon must use mdi:name")
+    if not isinstance(path, str) or len(path) > MAX_MDI_PATH or (
+        path and (not MDI_PATH.fullmatch(path) or not re.match(r"^[Mm]", path))
+    ):
+        raise ValueError("Invalid MDI vector path")
+    if path and not (MDI_ICON.fullmatch(icon) or icon in ("", "none")):
+        raise ValueError("Vector path requires an MDI icon")
+    if MDI_ICON.fullmatch(icon) and not path:
+        raise ValueError("MDI icon is missing its vector path")
+
 
 # Keep these presets aligned with app/src/main/assets/config/app.js.
 PRESETS = {
@@ -139,8 +158,7 @@ def validate_pages(pages: list[dict]) -> None:
         for card in cards:
             if "style" in card:
                 validate_style(card["style"])
-            if card.get("icon", "") not in CARD_ICONS:
-                raise ValueError("Invalid tile icon")
+            validate_icon(card)
             if card.get("type") == "camera" and card.get("entity_id") and not card["entity_id"].startswith("camera."):
                 raise ValueError("Camera widget requires a camera entity")
             if card.get("type") == "weather" and card.get("entity_id") and not card["entity_id"].startswith("weather."):

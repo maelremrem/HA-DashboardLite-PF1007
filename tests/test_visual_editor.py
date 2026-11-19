@@ -78,7 +78,7 @@ class VisualEditorTests(unittest.TestCase):
 
     def test_resource_and_versions(self):
         manifest = json.loads((PY / "manifest.json").read_text())
-        self.assertEqual(manifest["version"], "1.3.0")
+        self.assertEqual(manifest["version"], "1.4.0")
         self.assertIn("frontend", manifest["dependencies"])
         self.assertIn("panel_custom", manifest["dependencies"])
         frontend = (PY / "frontend_resource.py").read_text()

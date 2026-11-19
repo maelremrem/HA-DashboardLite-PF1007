@@ -1,50 +1,58 @@
 /* HA Frame visual editor - bundled with the Home Assistant integration. */
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "1.4.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
   ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"],
   ["weather", "Météo"], ["graph", "Courbe"], ["camera", "Caméra (MJPEG)"]
 ];
-const ICON_OPTIONS = [
-  ["","Automatique"],["none","Aucune"],["home","Maison"],["light","Ampoule"],
-  ["thermometer","Thermomètre"],["energy","Énergie"],["water","Eau"],
-  ["sun","Soleil"],["cloud","Nuage"],["lock","Cadenas"],["camera","Caméra"],
-  ["chart","Graphique"],["fan","Ventilation"],["battery","Batterie"],
-  ["wifi","Wi-Fi"],["person","Présence"],["settings","Réglages"],
-  ["bell","Cloche"],["door","Porte"],["plug","Prise"],["moon","Lune"],
-  ["heart","Cœur"]
-];
-const ICON_PATHS = {
-  home:'<path d="M3 11 12 3 21 11M5 10v11h14V10M10 21v-6h4v6"/>',
-  light:'<circle cx="12" cy="9" r="6"/><path d="M9 15v4h6v-4M10 22h4"/>',
-  thermometer:'<rect x="10" y="3" width="4" height="14" rx="2"/><circle cx="12" cy="18" r="4"/><path d="M12 8v11"/>',
-  energy:'<path d="m13 2-8 11h7l-2 9 10-12h-7z"/>',
-  water:'<path d="M12 2S5 11 5 15a7 7 0 0 0 14 0C19 11 12 2 12 2Z"/>',
-  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3m14 0h3M4 4l2 2m12 12 2 2M20 4l-2 2M6 18l-2 2"/>',
-  cloud:'<path d="M5 18a4 4 0 0 1 1-8 7 7 0 0 1 13 1 4 4 0 0 1-1 8H6"/>',
-  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
-  camera:'<rect x="2" y="6" width="20" height="14" rx="3"/><circle cx="12" cy="13" r="4"/><path d="m7 6 2-3h6l2 3"/>',
-  chart:'<path d="M3 3v18h19M5 17l5-5 4 3 7-10"/>',
-  fan:'<circle cx="12" cy="12" r="2"/><path d="M12 10C6 4 10 0 14 3s1 7-2 7ZM14 12c9-1 11 4 6 7s-8-1-8-5ZM10 14c-5 8-10 6-10 1s5-6 10-3Z"/>',
-  battery:'<rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 10v4M6 12h9"/>',
-  wifi:'<path d="M2 8a16 16 0 0 1 20 0M5 12a10 10 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
-  person:'<circle cx="12" cy="7" r="4"/><path d="M3 22a9 9 0 0 1 18 0"/>',
-  settings:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3"/>',
-  bell:'<path d="M5 17l2-3v-4a5 5 0 0 1 10 0v4l2 3zM10 19a2 2 0 0 0 4 0"/>',
-  door:'<rect x="5" y="3" width="14" height="19"/><circle cx="15" cy="13" r="1"/>',
-  plug:'<path d="M8 3v7m8-7v7M5 10a7 7 0 0 0 14 0M12 17v5"/>',
-  moon:'<path d="M18 3C8 2 5 14 13 18c3 2 7 0 8-2-4 8-14 8-17 0C1 8 10 0 18 3Z"/>',
-  heart:'<path d="M12 21C9 18 2 13 2 8 2 1 9 2 12 6c3-4 10-5 10 2 0 5-7 11-10 13Z"/>'
+const LEGACY_MDI = {
+  home:"mdi:home", light:"mdi:lightbulb", thermometer:"mdi:thermometer",
+  energy:"mdi:flash", water:"mdi:water", sun:"mdi:weather-sunny",
+  cloud:"mdi:weather-cloudy", lock:"mdi:lock", camera:"mdi:camera",
+  chart:"mdi:chart-line", fan:"mdi:fan", battery:"mdi:battery",
+  wifi:"mdi:wifi", person:"mdi:account", settings:"mdi:cog",
+  bell:"mdi:bell", door:"mdi:door", plug:"mdi:power-plug",
+  moon:"mdi:weather-night", heart:"mdi:heart"
 };
-const AUTO_ICONS = {light:"light",thermostat:"thermometer",weather:"sun",
-  graph:"chart",camera:"camera",cover:"door",gauge:"chart"};
-function tileIconMarkup(icon, type, color) {
-  const name = icon === "none" ? "" : icon || AUTO_ICONS[type] || "";
-  const paths = ICON_PATHS[name];
-  if (!paths) return "";
-  return "<svg class='tile-icon' viewBox='0 0 24 24' fill='none' stroke='" +
-    color + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' " +
-    "aria-label='" + esc(name) + "'>" + paths + "</svg>";
+const DOMAIN_MDI = {
+  light:"mdi:lightbulb", climate:"mdi:thermostat", cover:"mdi:window-shutter",
+  camera:"mdi:camera", weather:"mdi:weather-partly-cloudy",
+  switch:"mdi:toggle-switch", sensor:"mdi:gauge", binary_sensor:"mdi:checkbox-marked-circle",
+  person:"mdi:account", fan:"mdi:fan", lock:"mdi:lock",
+  media_player:"mdi:play-circle", automation:"mdi:robot", scene:"mdi:palette"
+};
+const MDI_REGEX = /^mdi:[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MDI_PATH_REGEX = /^[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\s-]+$/;
+const POPULAR_MDI = [
+  "mdi:home","mdi:lightbulb","mdi:thermometer","mdi:water-percent",
+  "mdi:flash","mdi:power-plug","mdi:fan","mdi:door","mdi:window-shutter",
+  "mdi:camera","mdi:cctv","mdi:weather-sunny","mdi:weather-partly-cloudy",
+  "mdi:chart-line","mdi:battery","mdi:wifi","mdi:lock","mdi:motion-sensor",
+  "mdi:account","mdi:robot","mdi:garage","mdi:clock-outline"
+];
+function mdiIconName(icon) {
+  if (icon === "none") return "none";
+  if (!icon) return "";
+  return LEGACY_MDI[icon] || icon;
+}
+function tileAutoIcon(tile, hass) {
+  const state = hass && hass.states && hass.states[tile.entity_id];
+  const custom = state && state.attributes && state.attributes.icon;
+  if (MDI_REGEX.test(custom || "")) return custom;
+  const domain = String(tile.entity_id || "").split(".")[0];
+  return DOMAIN_MDI[domain] || DOMAIN_MDI[tile.type] || "mdi:bookmark-outline";
+}
+function tileIconMarkup(icon, type, color, entityId, hass) {
+  if (icon === "none") return "";
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#67dbba";
+  if (!icon && entityId && hass && hass.states && hass.states[entityId]) {
+    return "<ha-state-icon class='tile-icon' data-state-entity='" +
+      esc(entityId) + "' style='color:" + safeColor + "'></ha-state-icon>";
+  }
+  const name = mdiIconName(icon) || tileAutoIcon({type,entity_id:entityId},hass);
+  if (!MDI_REGEX.test(name)) return "";
+  return "<ha-icon class='tile-icon' icon='" + esc(name) +
+    "' style='color:" + safeColor + "' aria-hidden='true'></ha-icon>";
 }
 
 const PRESETS = {
@@ -222,6 +230,13 @@ function compatibleVersion(version) {
   const parts=String(version||"").match(/^v?(\d+)\.(\d+)\.(\d+)/);
   return Boolean(parts && Number(parts[1])>=1);
 }
+function supportsMdi(version) {
+  const parts = String(version || "").replace(/^v/, "").split(".");
+  if (parts.length !== 3 || parts.some(part=>!part || !/^[0-9]+$/.test(part))) return false;
+  const major = Number(parts[0]), minor = Number(parts[1]);
+  return major > 1 || (major === 1 && minor >= 1);
+}
+
 
 const LAYOUT_TEMPLATES = [
   {id:"overview", name:"Vue générale", columns:3, tiles:[
@@ -302,6 +317,8 @@ const STYLE = [
   ".tile-value{flex:0 1 auto;font-size:clamp(11px,2.5cqw,34px);line-height:1.1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".tile-hint{flex:0 0 auto;font-size:clamp(7px,1.15cqw,15px);line-height:1;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".tile-icon{position:absolute;top:8%;right:6%;width:clamp(12px,2.2cqw,28px);height:clamp(12px,2.2cqw,28px);pointer-events:none}",
+  ".icon-info{padding:8px 0 14px;align-items:center}.icon-info ha-icon{--mdc-icon-size:32px}",
+  "ha-icon-picker{display:block;margin:4px 0 12px}",
   ".tile-camera{flex:1;display:grid;place-items:center;text-align:center;min-height:0;margin:1cqw 0;background:#020911;border-radius:6px;font-size:clamp(8px,1.3cqw,16px);opacity:.9;position:relative;overflow:hidden}",
   ".camera-dot{position:absolute;top:7px;left:8px;font-size:clamp(7px,.95cqw,12px);color:#ff7171}",
   ".tile-graph{width:100%;height:36%;min-height:10px;flex:1 1 auto;overflow:hidden}.tile-graph polyline{fill:none;stroke:currentColor;stroke-width:3;vector-effect:non-scaling-stroke}",
@@ -601,7 +618,7 @@ class HaFrameVisualEditor extends HTMLElement {
       const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
       const cell = layout.cells[i];
-      const icon = tileIconMarkup(tile.icon || "", tile.type, accent);
+      const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
       const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
         "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
       return "<div class='screen-tile" + (this._tile===i?" selected":"") +
@@ -631,6 +648,12 @@ class HaFrameVisualEditor extends HTMLElement {
       "<div class='screen-grid' style='grid-template-columns:repeat(" + page.columns +
       ",minmax(0,1fr));grid-template-rows:repeat(" + layout.rows + "," +
       rowPct.toFixed(3) + "%)'>" + grid + "</div></div>";
+    if (target.querySelectorAll) {
+      for (const element of target.querySelectorAll("[data-state-entity]")) {
+        const state = this._hass && this._hass.states && this._hass.states[element.dataset.stateEntity];
+        if (state) element.stateObj = state;
+      }
+    }
   }
   _inspector() {
     const target = this.shadowRoot.querySelector("[data-inspector]");
@@ -716,8 +739,23 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type === "gauge" ? "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
           esc(tile.max) + "'></label></div>" : "") +
-        "<label class='field'>Icône<select data-bind='card-icon'>" +
-        ICON_OPTIONS.map(([id,name])=>option(id,name,tile.icon || "")).join("") + "</select></label>" +
+        "<div class='inspector-head'><strong>Icône Home Assistant</strong></div>" +
+        "<label class='field'>Icône MDI (vide = icône de l’entité)<input data-bind='card-icon' " +
+        "list='ha-frame-mdi' maxlength='96' placeholder='mdi:lightbulb' value='" +
+        esc(mdiIconName(tile.icon || "") === "none" ? "none" : mdiIconName(tile.icon || "")) +
+        "'></label><datalist id='ha-frame-mdi'>" +
+        [...new Set([...POPULAR_MDI, ...Object.values(this._hass && this._hass.states || {})
+          .map(entity=>entity.attributes && entity.attributes.icon).filter(icon=>MDI_REGEX.test(icon||""))])]
+          .map(icon=>"<option value='" + esc(icon) + "'></option>").join("") + "</datalist>" +
+        (customElements.get("ha-icon-picker")
+          ? "<ha-icon-picker data-ha-icon-picker label='Rechercher une icône MDI' value='" +
+            esc(MDI_REGEX.test(mdiIconName(tile.icon||"")) ? mdiIconName(tile.icon||"") : "") +
+            "'></ha-icon-picker>"
+          : "") +
+        "<div class='row icon-info'><ha-icon data-icon-preview icon='" +
+        esc(mdiIconName(tile.icon||"") === "none" ? "" :
+          mdiIconName(tile.icon||"") || tileAutoIcon(tile,this._hass)) +
+        "'></ha-icon><span class='muted'>Utilise mdi:nom, none pour masquer, ou vide pour automatique.</span></div>" +
         "<div class='row'><label class='field' style='flex:1'>Largeur<select data-bind='card-colspan'>" +
         Array.from({length:page.columns},(_,i)=>option(i+1,(i+1)+" colonne"+(i?"s":""),tile.col_span||1)).join("") +
         "</select></label><label class='field' style='flex:1'>Hauteur<select data-bind='card-rowspan'>" +
@@ -732,6 +770,21 @@ class HaFrameVisualEditor extends HTMLElement {
         "<button data-action='delete-tile' class='danger'>Supprimer</button></div>";
     }
     target.innerHTML = html;
+    const picker = target.querySelector("[data-ha-icon-picker]");
+    if (picker) {
+      picker.suggestedIcons = POPULAR_MDI;
+      picker.addEventListener("value-changed", event => {
+        const next = event.detail && event.detail.value || "";
+        if (next && !MDI_REGEX.test(next)) return;
+        const card = this._tileObject();
+        if (!card) return;
+        card.icon = next;
+        delete card.icon_path;
+        this._mark();
+        this._inspector();
+        this._preview();
+      });
+    }
   }
   _click(event) {
     const tile = event.target.closest("[data-tile]");
@@ -807,7 +860,10 @@ class HaFrameVisualEditor extends HTMLElement {
       if (bind === "card-entity") tile.entity_id = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
-      if (bind === "card-icon") tile.icon = target.value;
+      if (bind === "card-icon") {
+        tile.icon = target.value.trim().toLowerCase();
+        delete tile.icon_path;
+      }
       if (bind === "card-colspan" || bind === "card-rowspan") {
         const key = bind === "card-colspan" ? "col_span" : "row_span";
         const previous = tile[key] || 1;
@@ -901,7 +957,9 @@ class HaFrameVisualEditor extends HTMLElement {
       if (page.cards.filter(tile=>tile.type==="camera").length > 1) return "Une seule caméra par page (utilise plusieurs pages)";
       for (const tile of page.cards) {
         if (!TYPES.some(([type])=>type===tile.type)) return "Type de tuile invalide";
-        if (tile.icon && !ICON_OPTIONS.some(([id])=>id===tile.icon)) return "Icône invalide";
+        if (tile.icon && tile.icon !== "none" && !MDI_REGEX.test(mdiIconName(tile.icon))) {
+          return "Icône invalide : utilise mdi:nom-icone";
+        }
         if (tile.style && !validTileStyle(tile.style)) return "Style de tuile invalide";
         if (tile.type === "camera" && tile.entity_id && !tile.entity_id.startsWith("camera.")) return "Choisir une entité camera.*";
         if (tile.type === "weather" && tile.entity_id && !tile.entity_id.startsWith("weather.")) return "Choisir une entité weather.*";
@@ -913,11 +971,74 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    if (cfg.pages.some(page=>page.cards.some(tile=>MDI_REGEX.test(tile.icon || ""))) &&
+        (!frame || !supportsMdi(frame.version))) {
+      return "Les icônes mdi: nécessitent l’APK Android v1.1.0 ou supérieur";
+    }
     if (cfg.pages.some(isAdvancedPage) && frame && frame.version &&
         !compatibleVersion(frame.version)) {
       return "Les widgets avancés, icônes et tailles requièrent l’APK Android v1.0.0 ou supérieur";
     }
     return "";
+  }
+  async _resolveIconPath(name, stateObj) {
+    const tag = stateObj ? "ha-state-icon" : "ha-icon";
+    if (typeof document === "undefined") throw new Error("Navigateur non disponible");
+    const element = document.createElement(tag);
+    element.style.cssText = "position:absolute;left:-9999px;width:24px;height:24px;pointer-events:none";
+    element.setAttribute("aria-hidden", "true");
+    if (stateObj) element.stateObj = stateObj;
+    else element.icon = name;
+    this.shadowRoot.appendChild(element);
+    try {
+      for (let attempt=0; attempt<70; attempt++) {
+        const root = element.shadowRoot;
+        const nested = root && root.querySelector("ha-icon");
+        const primary = (nested && nested.shadowRoot &&
+            nested.shadowRoot.querySelector("ha-svg-icon")) ||
+          (root && root.querySelector("ha-svg-icon"));
+        const path = primary && primary.path ||
+          (nested && nested._path) || (!stateObj && element._path);
+        if (typeof path === "string" && path.length<=8192 && /^[Mm]/.test(path) &&
+            MDI_PATH_REGEX.test(path)) return path;
+        await new Promise(resolve=>setTimeout(resolve,60));
+      }
+      throw new Error("Icône introuvable dans Home Assistant : " + (name || stateObj?.entity_id || "entité"));
+    } finally {
+      element.remove();
+    }
+  }
+  async _prepareMdiConfig() {
+    const result = clone(this._config);
+    const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    const supported = frame && supportsMdi(frame.version);
+    if (!supported) return result;
+    const resolved = new Map();
+    for (const page of result.pages) {
+      for (const tile of page.cards) {
+        if (tile.icon === "none") {
+          delete tile.icon_path;
+          continue;
+        }
+        const requested = mdiIconName(tile.icon || "") || tileAutoIcon(tile,this._hass);
+        if (!MDI_REGEX.test(requested)) continue;
+        const state = this._hass && this._hass.states && this._hass.states[tile.entity_id];
+        const auto = !tile.icon && state && !state.attributes?.icon;
+        const key = auto ? "state|" + tile.entity_id : requested;
+        let path = resolved.get(key);
+        if (!path) {
+          try { path = await this._resolveIconPath(auto ? null : requested, auto ? state : null); }
+          catch (error) {
+            if (auto) path = await this._resolveIconPath(requested, null);
+            else throw error;
+          }
+          resolved.set(key,path);
+        }
+        tile.icon_path = path;
+        if (tile.icon) tile.icon = requested;
+      }
+    }
+    return result;
   }
   async _save() {
     if (!this._dirty || this._busy) return;
@@ -926,10 +1047,15 @@ class HaFrameVisualEditor extends HTMLElement {
     this._busy = true;
     this._message("Enregistrement sur le cadre…",false);
     try {
+      const prepared = await this._prepareMdiConfig();
+      if (JSON.stringify(prepared).length > 125000) {
+        throw new Error("Configuration trop volumineuse (icônes MDI)");
+      }
       const response = await this._hass.callWS({
         type: "ha_frame/editor/save", entry_id: this._frameId,
-        revision: this._revision, config: clone(this._config)
+        revision: this._revision, config: prepared
       });
+      this._config = prepared;
       this._revision = response.revision;
       this._dirty = false;
       this._message("Enregistré sur le cadre sélectionné", false);

@@ -148,7 +148,12 @@ function validatePages(items) {
       if (!Number.isFinite(Number(card.min ?? 0)) || !Number.isFinite(Number(card.max ?? 100)) || Number(card.max ?? 100) <= Number(card.min ?? 0)) throw new Error('Plage de jauge invalide');
       if (card.label.length > 48) throw new Error('Titre de carte trop long');
       if (card.entity_id && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(card.entity_id)) throw new Error(`Entité invalide : ${card.entity_id}`);
-      if (card.icon && !ICONS.includes(card.icon)) throw new Error('Icône invalide');
+      if (card.icon && !ICONS.includes(card.icon) && !/^mdi:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(card.icon)) {
+        throw new Error('Icône invalide');
+      }
+      if (card.icon && card.icon.startsWith('mdi:') && !card.icon_path) {
+        throw new Error('Configurer les icônes MDI depuis Home Assistant Studio');
+      }
       if (card.type === 'camera' && card.entity_id && !card.entity_id.startsWith('camera.')) throw new Error('Utilise une entité camera.*');
       if (card.type === 'weather' && card.entity_id && !card.entity_id.startsWith('weather.')) throw new Error('Utilise une entité weather.*');
     }
@@ -332,9 +337,24 @@ function renderCards() {
       item.textContent=name || 'Automatique';
       icon.append(item);
     }
+    if (card.icon && card.icon.startsWith('mdi:')) {
+      const current=document.createElement('option');
+      current.value=card.icon;
+      current.textContent=card.icon+' (Home Assistant Studio)';
+      icon.append(current);
+    }
     icon.value=card.icon || '';
-    icon.addEventListener('change',()=>{ card.icon=icon.value;changed(); });
+    icon.addEventListener('change',()=>{
+      if (icon.value === card.icon) return;
+      card.icon=icon.value;
+      delete card.icon_path;
+      changed();
+    });
     iconLabel.append(icon);
+    const iconHelp=document.createElement('p');
+    iconHelp.className='muted';
+    iconHelp.textContent='Toutes les icônes mdi: sont sélectionnables dans HA Frame Studio.';
+    iconLabel.append(iconHelp);
     advanced.append(iconLabel);
     for (const [key,text,max] of [['col_span','Largeur (colonnes)',Number(pages[activePage].columns)],
                                   ['row_span','Hauteur (rangées)',2]]) {

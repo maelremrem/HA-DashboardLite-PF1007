@@ -179,7 +179,7 @@ final class IntegrationApiServer {
             if (contentType == null || !contentType.toLowerCase(Locale.US).startsWith("application/json"))
                 throw new IllegalArgumentException("JSON required");
             int size = Integer.parseInt(r.headers.containsKey("content-length") ? r.headers.get("content-length") : "-1");
-            if (size < 0 || size > 32768) throw new IllegalArgumentException("Invalid request length");
+            if (size < 0 || size > 131072) throw new IllegalArgumentException("Invalid request length");
             byte[] raw = new byte[size];
             int pos = 0;
             while (pos < size) {

@@ -54,6 +54,30 @@ class DashboardEditorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.validate_pages(invalid)
 
+    def test_home_assistant_mdi_icons(self):
+        mdi = deepcopy(self.pages)
+        card = mdi[0]["cards"][0]
+        card["icon"] = "mdi:lightbulb-group"
+        card["icon_path"] = "M12,2L20,22H4Z"
+        model.validate_pages(mdi)
+        for value in ("mdi:bad icon", "https://example.com/icon.svg", "other:lamp"):
+            invalid = deepcopy(mdi)
+            invalid[0]["cards"][0]["icon"] = value
+            with self.assertRaises(ValueError):
+                model.validate_pages(invalid)
+        for value in ("<svg onload=alert(1)>", "M1 2; drop()", "M" + "2" * 8200):
+            invalid = deepcopy(mdi)
+            invalid[0]["cards"][0]["icon_path"] = value
+            with self.assertRaises(ValueError):
+                model.validate_pages(invalid)
+        missing = deepcopy(mdi)
+        del missing[0]["cards"][0]["icon_path"]
+        with self.assertRaises(ValueError):
+            model.validate_pages(missing)
+        automatic = deepcopy(mdi)
+        automatic[0]["cards"][0]["icon"] = ""
+        model.validate_pages(automatic)
+
     def test_advanced_icons_and_spans(self):
         advanced = deepcopy(self.pages)
         advanced[0]["cards"] = [
