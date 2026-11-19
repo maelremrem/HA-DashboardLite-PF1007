@@ -26,6 +26,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -246,8 +247,13 @@ final class IntegrationApiServer {
                 }
                 if ("GET".equals(req.method) && "/api/v1/status".equals(req.path)) {
                     JSONObject data = DisplayPrefs.load(context).toJson();
+                    JSONObject diagnostics = DeviceDiagnostics.snapshot(context);
+                    for (Iterator<String> keys = diagnostics.keys(); keys.hasNext();) {
+                        String key = keys.next();
+                        data.put(key, diagnostics.get(key));
+                    }
                     data.put("device_id", deviceId()).put("name", "HA Frame PF1007")
-                        .put("version", "0.7.0").put("lux", Float.isNaN(lastLux) ? JSONObject.NULL : lastLux)
+                        .put("lux", Float.isNaN(lastLux) ? JSONObject.NULL : lastLux)
                         .put("lux_source", lastSource).put("has_light_sensor", hasSensor)
                         .put("sleeping", lastSleeping).put("effective_brightness", lastBrightness);
                     send(out, 200, data);
