@@ -521,6 +521,10 @@ class HaFrameVisualEditor extends HTMLElement {
       this._panel = "page";
       this._render(); return;
     }
+    const theme = event.target.closest("[data-preset]");
+    if (theme) { this._applyPreset(theme.dataset.preset); return; }
+    const layout = event.target.closest("[data-layout]");
+    if (layout) { this._applyLayout(layout.dataset.layout, layout.dataset.mode); return; }
     const button = event.target.closest("[data-action]");
     if (button && !button.disabled) this._action(button.dataset.action);
   }
@@ -535,11 +539,17 @@ class HaFrameVisualEditor extends HTMLElement {
       this._open();
       return;
     }
-    if (target.dataset.bind === "preset" && target.value !== "custom") {
-      if (this._dirty && this._config.custom_css && !confirm("Remplacer le CSS actuel par ce thème ?")) return;
-      this._config.custom_css = PRESETS[target.value];
-      this._mark();
-      this._render();
+    if (target.dataset.bind === "shape" && this._config) {
+      const next = withShape(this._config.custom_css, target.value);
+      if (next.length > 12000) {
+        this._message("CSS trop long pour modifier la forme", true); return;
+      }
+      if (next !== this._config.custom_css) {
+        this._config.custom_css = next;
+        this._mark();
+        this._render();
+      }
+      return;
     }
     if (target.dataset.bind === "columns" || target.dataset.bind === "card-type") {
       this._input(event);
@@ -569,6 +579,34 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     this._mark();
     this._preview();
+  }
+  _applyPreset(id) {
+    if (!Object.prototype.hasOwnProperty.call(PRESETS, id)) return;
+    const next = PRESETS[id];
+    if (!this._config || this._config.custom_css === next) return;
+    if (this._config.custom_css && !confirm("Remplacer le CSS actuel par ce thème ?")) return;
+    this._config.custom_css = next;
+    this._mark();
+    this._render();
+  }
+  _applyLayout(id, mode) {
+    if (!this._config) return;
+    const template = LAYOUT_TEMPLATES.find(t=>t.id === id);
+    if (!template || !["add","replace"].includes(mode)) return;
+    const next = templatePage(template);
+    if (mode === "add") {
+      if (this._config.pages.length >= 4) return this._message("4 pages maximum", true);
+      this._config.pages.push(next);
+      this._page = this._config.pages.length - 1;
+    } else {
+      if (this._pageObject().cards.length &&
+          !confirm("Remplacer la page et supprimer ses tuiles et leurs entités associées ?")) return;
+      this._config.pages[this._page] = next;
+    }
+    this._tile = -1;
+    this._panel = "page";
+    this._mark();
+    this._render();
   }
   _reorder(from,to) {
     if (from === to || from < 0 || to < 0) return;
@@ -627,7 +665,7 @@ class HaFrameVisualEditor extends HTMLElement {
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
       return this._open();
     }
-    if (action === "appearance" || action === "css") {
+    if (action === "appearance" || action === "css" || action === "layouts") {
       this._panel = action; this._tile = -1; this._render(); return;
     }
     if (action === "page-panel") {this._panel="page";this._tile=-1;this._render();return;}
@@ -635,6 +673,14 @@ class HaFrameVisualEditor extends HTMLElement {
       if (this._config.pages.length >= 4) return this._message("4 pages maximum",true);
       this._config.pages.push({title:"Page "+(this._config.pages.length+1),columns:3,cards:[]});
       this._page=this._config.pages.length-1;this._tile=-1;this._panel="page";
+    } else if (action === "duplicate-page") {
+      if (this._config.pages.length >= 4) return this._message("4 pages maximum", true);
+      const copied = clone(page);
+      copied.title = ("Copie " + copied.title).slice(0, 32);
+      this._config.pages.splice(this._page + 1, 0, copied);
+      this._page++;
+      this._tile = -1;
+      this._panel = "page";
     } else if (action === "delete-page") {
       if (this._config.pages.length < 2) return this._message("Conserve au moins une page",true);
       if (!confirm("Supprimer cette page et toutes ses tuiles ?")) return;
