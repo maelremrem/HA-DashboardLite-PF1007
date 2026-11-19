@@ -34,7 +34,7 @@ final class ConfigWebServer {
     static final String ACTION_CONFIG_UPDATED = "dev.maelab.haframe.CONFIG_UPDATED";
     static final int PORT = 8765;
     private static final long DURATION_MS = 15 * 60 * 1000L;
-    private static final int MAX_BODY = 32 * 1024;
+    private static final int MAX_BODY = 128 * 1024;
     private static final String TAG = "HAFrameConfig";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static ConfigWebServer current;
