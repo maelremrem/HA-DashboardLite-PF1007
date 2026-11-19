@@ -1073,7 +1073,9 @@ class HaFrameVisualEditor extends HTMLElement {
       }
       return;
     }
-    if (["columns","card-type","card-icon","card-colspan","card-rowspan"].includes(target.dataset.bind)) {
+    if (["columns","card-type","card-icon","card-colspan","card-rowspan",
+      "page-auto-operator","tap-action","long-press","history-hours",
+      "rule-operator","rule-hide"].includes(target.dataset.bind)) {
       this._input(event);
       this._inspector();
     }
@@ -1086,6 +1088,15 @@ class HaFrameVisualEditor extends HTMLElement {
     if (bind === "title") this._config.dashboard_title = target.value;
     else if (bind === "css") this._config.custom_css = target.value;
     else if (bind === "page-title") page.title = target.value;
+    else if (bind.startsWith("page-auto-")) {
+      const prop = bind.slice("page-auto-".length);
+      const next = {...(page.activate_when || {entity_id:"",operator:"equals",value:""})};
+      if (prop === "entity") next.entity_id = target.value.trim();
+      if (prop === "operator") next.operator = target.value;
+      if (prop === "value") next.value = target.value;
+      if (!next.entity_id) delete page.activate_when;
+      else page.activate_when = next;
+    }
     else if (bind === "columns") {
       const cols = Number(target.value), previous = page.columns;
       page.columns = cols;
@@ -1102,6 +1113,20 @@ class HaFrameVisualEditor extends HTMLElement {
       if (bind === "card-entity") tile.entity_id = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
+      if (bind === "history-hours") tile.history_hours = Number(target.value);
+      if (bind === "tap-action") tile.tap_action = target.value;
+      if (bind === "long-press") tile.long_press = target.value;
+      if (bind.startsWith("rule-")) {
+        const prop = bind.slice(5);
+        const next = {...(tile.rule || {entity_id:"",operator:"above",value:"25",hide:false})};
+        if (prop === "entity") next.entity_id = target.value.trim();
+        if (prop === "operator") next.operator = target.value;
+        if (prop === "value") next.value = target.value;
+        if (prop === "hide") next.hide = target.value === "true";
+        if (prop === "background") next.background = target.value;
+        if (!next.entity_id) delete tile.rule;
+        else tile.rule = next;
+      }
       if (bind === "card-icon") {
         tile.icon = target.value.trim().toLowerCase();
         delete tile.icon_path;
@@ -1228,6 +1253,10 @@ class HaFrameVisualEditor extends HTMLElement {
       if (![2,3,4].includes(page.columns) || page.cards.length > page.columns * 3) return "Trop de tuiles pour la grille";
       try { gridPlacement(page); }
       catch (error) { return error.message; }
+      if (page.activate_when) {
+        const problem = checkRule(page.activate_when, false);
+        if (problem) return "Page automatique : " + problem;
+      }
       if (page.cards.filter(tile=>tile.type==="camera").length > 1) return "Une seule caméra par page (utilise plusieurs pages)";
       for (const tile of page.cards) {
         if (!TYPES.some(([type])=>type===tile.type)) return "Type de tuile invalide";
@@ -1235,6 +1264,13 @@ class HaFrameVisualEditor extends HTMLElement {
           return "Icône invalide : utilise mdi:nom-icone";
         }
         if (tile.style && !validTileStyle(tile.style)) return "Style de tuile invalide";
+        if (tile.rule) {
+          const problem = checkRule(tile.rule, true);
+          if (problem) return "Tuile conditionnelle : " + problem;
+        }
+        if (!TAP_ACTIONS.some(([key])=>key===(tile.tap_action||"default"))) return "Action tactile invalide";
+        if (!LONG_PRESS_ACTIONS.some(([key])=>key===(tile.long_press||"none"))) return "Appui long invalide";
+        if (tile.history_hours && ![1,24,168].includes(tile.history_hours)) return "Période historique invalide";
         if (tile.type === "camera" && tile.entity_id && !tile.entity_id.startsWith("camera.")) return "Choisir une entité camera.*";
         if (tile.type === "weather" && tile.entity_id && !tile.entity_id.startsWith("weather.")) return "Choisir une entité weather.*";
         if (tile.label.length > 48) return "Titre de tuile trop long";
@@ -1245,6 +1281,12 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
+    if (cfg.pages.some(page=>page.activate_when || page.cards.some(tile=>
+        ["calendar","todo","bambu","energy","air_quality","presence","circular_gauge","history"].includes(tile.type) ||
+        tile.rule || tile.tap_action || tile.long_press || tile.history_hours)) &&
+        !supportsAdvancedApk(frame && frame.version)) {
+      return "Les widgets et automatismes avancés nécessitent l’APK Android v1.2.0";
+    }
     if (cfg.pages.some(page=>page.cards.some(tile=>MDI_REGEX.test(tile.icon || ""))) &&
         (!frame || !supportsMdi(frame.version))) {
       return "Les icônes mdi: nécessitent l’APK Android v1.1.0 ou supérieur";
@@ -1394,6 +1436,9 @@ class HaFrameVisualEditor extends HTMLElement {
       if (!tile || this._styleClipboard == null) return;
       if (Object.keys(this._styleClipboard).length) tile.style = clone(this._styleClipboard);
       else delete tile.style;
+    } else if (action === "clear-tile-rule") {
+      if (!tile) return;
+      delete tile.rule;
     } else if (action === "clear-tile-style") {
       if (!tile) return;
       delete tile.style;
