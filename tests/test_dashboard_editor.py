@@ -54,6 +54,45 @@ class DashboardEditorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.validate_pages(invalid)
 
+    def test_advanced_icons_and_spans(self):
+        advanced = deepcopy(self.pages)
+        advanced[0]["cards"] = [
+            {**model.new_card("camera", "Entrée", "camera.front"),
+             "col_span": 2, "row_span": 2, "icon": "camera",
+             "style": {"background": "#101820", "foreground": "#ffffff",
+                       "accent": "#ff9900", "radius": 18}},
+            {**model.new_card("weather", "Météo", "weather.house"), "icon": "sun"},
+        ]
+        model.validate_pages(advanced)
+        places, rows = model.card_grid(advanced[0])
+        self.assertEqual((places[0], rows), ((0, 0, 2, 2), 2))
+        too_large = deepcopy(advanced)
+        too_large[0]["cards"][0]["row_span"] = 3
+        with self.assertRaises(ValueError):
+            model.validate_pages(too_large)
+        bad_entity = deepcopy(advanced)
+        bad_entity[0]["cards"][0]["entity_id"] = "sensor.not_a_camera"
+        with self.assertRaises(ValueError):
+            model.validate_pages(bad_entity)
+        for field, bad in (("icon", "unsupported"),
+                           ("style", {"background": "red"}),
+                           ("style", {"unknown": True}),
+                           ("style", {"radius": 73})):
+            invalid = deepcopy(advanced)
+            invalid[0]["cards"][0][field] = bad
+            with self.assertRaises(ValueError):
+                model.validate_pages(invalid)
+
+    def test_grid_rejects_oversized_tiles(self):
+        full = deepcopy(self.pages)
+        full[0]["columns"] = 2
+        full[0]["cards"] = [
+            {**model.new_card("metric", "A"), "col_span": 2}
+            for _ in range(4)
+        ]
+        with self.assertRaises(ValueError):
+            model.validate_pages(full)
+
     def test_presets(self):
         self.assertEqual(set(model.PRESETS), {"original","ocean","amber","light","midnight","forest","lavender","rose","graphite","solar","arctic","retro","synthwave","sand"})
         self.assertTrue(all(len(css) <= 12000 for css in model.PRESETS.values()))
