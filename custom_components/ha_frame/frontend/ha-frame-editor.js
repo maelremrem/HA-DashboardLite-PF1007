@@ -22,7 +22,7 @@ const DOMAIN_MDI = {
   media_player:"mdi:play-circle", automation:"mdi:robot", scene:"mdi:palette"
 };
 const MDI_REGEX = /^mdi:[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MDI_PATH_REGEX = /^[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\\s-]+$/;
+const MDI_PATH_REGEX = /^[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\s-]+$/;
 const POPULAR_MDI = [
   "mdi:home","mdi:lightbulb","mdi:thermometer","mdi:water-percent",
   "mdi:flash","mdi:power-plug","mdi:fan","mdi:door","mdi:window-shutter",
