@@ -142,7 +142,7 @@ def validate_style(style: dict) -> None:
 
 
 
-RULE_OPERATORS = {"equals", "not_equals", "above", "below", "on", "off"}
+RULE_OPERATORS = {"equals", "not_equals", "above", "below", "on", "off", "time_between"}
 TAP_ACTIONS = {"default", "none", "page_next", "page_prev", "settings", "camera_fullscreen"}
 LONG_PRESS_ACTIONS = {"none", "toggle", "page_next", "settings"}
 HISTORY_WINDOWS = {1, 24, 168}
@@ -160,7 +160,7 @@ def validate_condition(rule: dict, *, visual: bool) -> None:
     entity_id = rule.get("entity_id", "")
     operator = rule.get("operator")
     value = rule.get("value", "")
-    if not isinstance(entity_id, str) or not ENTITY_ID.fullmatch(entity_id):
+    if not isinstance(entity_id, str) or (operator != "time_between" and not ENTITY_ID.fullmatch(entity_id)) or (operator == "time_between" and entity_id and not ENTITY_ID.fullmatch(entity_id)):
         raise ValueError("Rule requires a Home Assistant entity")
     if operator not in RULE_OPERATORS:
         raise ValueError("Unsupported rule comparison")
@@ -171,6 +171,8 @@ def validate_condition(rule: dict, *, visual: bool) -> None:
         )
     ):
         raise ValueError("Invalid rule value")
+    if operator == "time_between" and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d", value):
+        raise ValueError("Invalid time window")
     if operator in {"equals", "not_equals"} and not value:
         raise ValueError("Rule comparison value required")
     if "hide" in rule and type(rule["hide"]) is not bool:
