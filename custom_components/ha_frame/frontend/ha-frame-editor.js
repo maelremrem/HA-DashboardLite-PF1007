@@ -888,6 +888,13 @@ class HaFrameVisualEditor extends HTMLElement {
     }
   }
   _click(event) {
+    const resize = event.target.closest("[data-resize]");
+    if (resize) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!resize.disabled) this._resizeTile(Number(resize.dataset.resizeIndex), resize.dataset.resize);
+      return;
+    }
     const tile = event.target.closest("[data-tile]");
     if (tile) {
       this._tile = Number(tile.dataset.tile);
@@ -1028,6 +1035,36 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     this._tile = -1;
     this._panel = "page";
+    this._mark();
+    this._render();
+  }
+  _resizeTile(index, action) {
+    if (!this._config || this._busy) return;
+    const choices = {
+      "grow-width": ["col_span", 1], "shrink-width": ["col_span", -1],
+      "grow-height": ["row_span", 1], "shrink-height": ["row_span", -1]
+    };
+    const choice = choices[action], page = this._pageObject();
+    const tile = page.cards[index];
+    if (!choice || !tile) return;
+    const [key, change] = choice;
+    const previous = tile[key] == null ? 1 : tile[key];
+    const next = previous + change;
+    const maximum = key === "col_span" ? page.columns : 2;
+    if (next < 1 || next > maximum) return;
+    const had = Object.prototype.hasOwnProperty.call(tile, key);
+    if (next === 1) delete tile[key];
+    else tile[key] = next;
+    try {
+      gridPlacement(page);
+    } catch (error) {
+      if (had) tile[key] = previous;
+      else delete tile[key];
+      this._message(error.message, true);
+      return;
+    }
+    this._tile = index;
+    this._panel = "tile";
     this._mark();
     this._render();
   }
@@ -1212,6 +1249,16 @@ class HaFrameVisualEditor extends HTMLElement {
       try { gridPlacement(page); }
       catch (error) { page.cards.pop(); return this._message(error.message,true); }
       this._tile=page.cards.length-1;this._panel="tile";
+    } else if (action === "copy-tile-style") {
+      if (!tile) return;
+      this._styleClipboard = clone(tile.style || {});
+      this._message("Style de la tuile copié", false);
+      this._inspector();
+      return;
+    } else if (action === "paste-tile-style") {
+      if (!tile || this._styleClipboard == null) return;
+      if (Object.keys(this._styleClipboard).length) tile.style = clone(this._styleClipboard);
+      else delete tile.style;
     } else if (action === "clear-tile-style") {
       if (!tile) return;
       delete tile.style;
