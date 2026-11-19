@@ -210,6 +210,9 @@ class HaFrameVisualEditor extends HTMLElement {
     } finally { this._loading = false; }
   }
   async _open() {
+    this._config = null;
+    this._revision = "";
+    this.shadowRoot.innerHTML = "<style>" + STYLE + "</style><ha-card><div class='empty'>Chargement de la configuration du cadre…</div></ha-card>";
     try {
       const response = await this._hass.callWS({type:"ha_frame/editor/get", entry_id:this._frameId});
       this._config = clone(response.config);
@@ -222,7 +225,9 @@ class HaFrameVisualEditor extends HTMLElement {
       this._render();
     } catch (error) {
       this._message("Impossible de charger ce cadre : " + (error.message || error), true);
-      this._render();
+      this.shadowRoot.innerHTML = "<style>" + STYLE + "</style><ha-card><div class='top'><div class='heading'>Cadre indisponible</div><div class='row toolbar'><select data-control='frame'>" +
+        this._frameOptions() + "</select><button data-action='reload'>Réessayer</button></div></div><div class='empty'>" +
+        esc(this._notice) + "</div></ha-card>";
     }
   }
   _pageObject() { return this._config.pages[this._page]; }
@@ -480,6 +485,10 @@ class HaFrameVisualEditor extends HTMLElement {
     } finally {this._busy = false;}
   }
   async _action(action) {
+    if (!this._config) {
+      if (action === "reload") return this._open();
+      return;
+    }
     const page = this._pageObject(), tile = this._tileObject();
     if (action === "save") return this._save();
     if (action === "reload" || action === "discard") {
