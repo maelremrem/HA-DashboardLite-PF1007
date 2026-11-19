@@ -15,7 +15,9 @@ Requirements:
 2. `hacs.json` and `custom_components/ha_frame/manifest.json` must be on the repository's **default branch** (or available in a compatible release).
 3. The Android **v0.7+** app must already be installed on the frame, connected to Wi-Fi, and have its integration API enabled.
 
-At the time this document was added, v0.7 is still on the `feature/v0.7-cards-night-notify-ha-integration` branch. Do **not** expect the Marketplace to install it from `main` until that branch is merged and the repository is made public.
+**v0.7 is now merged into `main`.** The required integration files are present on the default branch. If GitHub still shows the repository as private, its owner must change its visibility before Marketplace installation works.
+
+To make it public: open the repository on GitHub → **Settings → General → Danger Zone → Change repository visibility → Make public**, and confirm. Review all committed files and history before doing so.
 
 After those requirements are met:
 
@@ -39,7 +41,7 @@ For an environment where `/config` is Home Assistant's config folder:
 
 ```bash
 cd /config
-git clone -b feature/v0.7-cards-night-notify-ha-integration \
+git clone -b main \
   git@github.com:maelremrem/HA-DashboardLite-PF1007.git ha-frame-source
 mkdir -p /config/custom_components
 cp -a ha-frame-source/custom_components/ha_frame /config/custom_components/
@@ -59,12 +61,12 @@ Restart Home Assistant after updating the component code. Adjust `/config` if yo
 
 ## Fedora: build and install Android v0.7
 
-The repository's default branch is v0.6 until the v0.7 pull request is merged:
+v0.7 is on the default `main` branch:
 
 ```bash
 cd ~/PF1007-2/HA-DashboardLite-PF1007
-git fetch origin
-git switch -c v0.7-test --track origin/feature/v0.7-cards-night-notify-ha-integration
+git switch main
+git pull --ff-only
 
 export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk
 export ANDROID_HOME="$HOME/Android/Sdk"
