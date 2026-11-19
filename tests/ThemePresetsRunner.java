@@ -7,10 +7,11 @@ import java.nio.file.Paths;
 public final class ThemePresetsRunner {
     public static void main(String[] args) throws Exception {
         String json = new String(Files.readAllBytes(Paths.get(args[0])), StandardCharsets.UTF_8);
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\\"(original|ocean|amber|light)\\\"\\s*:\\s*\\\"((?:\\\\\\.|[^\\\"])*)\\\"").matcher(json);
+        // Tests each generated CSS preset; the JSON escape sequence conversion is sufficient for the fixtures.
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\\"(original|ocean|amber|light)\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"").matcher(json);
         int count = 0;
         while (m.find()) {
-            String css = m.group(2).replace("\\n", "\n").replace("\\\"", "\"");
+            String css = m.group(2).replace("\\n", "\n").replace("\\\\\"", "\"");
             CanvasTheme.parse(css);
             count++;
         }
