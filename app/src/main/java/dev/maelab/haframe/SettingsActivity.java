@@ -175,7 +175,7 @@ public final class SettingsActivity extends Activity {
     }
 
     private void save() {
-        FrameConfig next = new FrameConfig();
+        FrameConfig next = FrameConfig.load(this);
         next.baseUrl = url.getText().toString().trim();
         try { next.webSocketUrl(); }
         catch (Exception e) {
