@@ -18,24 +18,24 @@ const sandbox = {
   console
 };
 
-const exports = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS })", sandbox);
+const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS })", sandbox);
 assert.ok(registered.has("ha-frame-visual-editor"));
 assert.equal(sandbox.window.customCards[0].type, "ha-frame-visual-editor");
-assert.equal(Object.keys(exports.PRESETS).length, 4);
-assert.equal(exports.esc('<script type="x">&</script>'),
+assert.equal(Object.keys(editorApi.PRESETS).length, 4);
+assert.equal(editorApi.esc('<script type="x">&</script>'),
   "&lt;script type=&quot;x&quot;&gt;&amp;&lt;/script&gt;");
 
-const styles = exports.nativeCss(exports.PRESETS.ocean);
+const styles = editorApi.nativeCss(editorApi.PRESETS.ocean);
 assert.equal(styles.body["background-color"], "#071c2b");
 assert.equal(styles[".metric"]["border-radius"], "23px");
 assert.equal(styles[".accent"].color, "#58d5e7");
 
-const invalid = exports.nativeCss("body{background-image:url(https://evil.example/img)}");
+const invalid = editorApi.nativeCss("body{background-image:url(https://evil.example/img)}");
 assert.equal(invalid.body, undefined);
 
-const copied = exports.clone({pages:[{cards:[{label:"A"}]}]});
+const copied = editorApi.clone({pages:[{cards:[{label:"A"}]}]});
 copied.pages[0].cards[0].label = "B";
-assert.equal(exports.clone({pages:[{cards:[{label:"A"}]}]}).pages[0].cards[0].label,"A");
+assert.equal(editorApi.clone({pages:[{cards:[{label:"A"}]}]}).pages[0].cards[0].label,"A");
 
 assert.match(src, /ha_frame\/editor\/list/);
 assert.match(src, /ha_frame\/editor\/get/);
