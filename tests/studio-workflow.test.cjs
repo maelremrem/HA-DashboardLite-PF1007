@@ -219,6 +219,36 @@ function makeEditor(cards = [
   assert.equal(instance._history.length,1);
   assert.equal(instance._dirty,false);
 
+  // Two overlapping fetches must never let a stale frame overwrite the current one.
+  const late=makeEditor().instance;
+  const requests={};
+  late._hass={callWS:({entry_id})=>new Promise(resolve=>{requests[entry_id]=resolve;})};
+  late._frameId="frame-old";
+  const firstLoad=late._open();
+  late._frameId="frame-new";
+  const secondLoad=late._open();
+  requests["frame-new"]({revision:"new-r1",config:{
+    dashboard_title:"New",custom_css:"",
+    pages:[{title:"New page",columns:2,cards:[]}]
+  }});
+  await secondLoad;
+  requests["frame-old"]({revision:"old-r1",config:{
+    dashboard_title:"Stale",custom_css:"",
+    pages:[{title:"Old page",columns:2,cards:[]}]
+  }});
+  await firstLoad;
+  assert.equal(late._config.dashboard_title,"New");
+  assert.equal(late._revision,"new-r1");
+  assert.equal(late._history.length,1);
+
+  late._busy=true;
+  const frameSelect={dataset:{control:"frame"},value:"frame-old"};
+  late._change({target:frameSelect});
+  assert.equal(frameSelect.value,"frame-new");
+  late._input({target:{dataset:{bind:"title"},value:"Should not apply"}});
+  assert.equal(late._config.dashboard_title,"New");
+  late._busy=false;
+
   assert.match(source,/data-action='undo'/);
   assert.match(source,/data-action='redo'/);
   assert.match(source,/data-resize='/);
