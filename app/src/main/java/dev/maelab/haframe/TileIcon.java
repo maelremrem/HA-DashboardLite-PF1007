@@ -31,7 +31,7 @@ final class TileIcon {
 
     static boolean validPath(String path) {
         return path != null && (path.isEmpty() || (path.length() <= 8192 &&
-            path.matches("[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\\\\s-]+") &&
+            path.matches("[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\\s-]+") &&
             (path.startsWith("M") || path.startsWith("m"))));
     }
 
