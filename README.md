@@ -26,6 +26,20 @@ This release changes **only the HA integration**. The existing Android **v0.7 AP
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
+## Android APK v1.1.1 — Android 6 startup crash fix
+
+This Android-only patch fixes a startup crash when Home Assistant sends the first
+numeric sensor states (`NoClassDefFoundError: HaClient$ExternalSyntheticLambda8`
+in `HaClient.putState`). The numeric trend buffer previously used
+`Map.computeIfAbsent`, unavailable on Android 6 (API 23). It now uses the
+API 23-compatible `ConcurrentHashMap.putIfAbsent`. Camera, icons and layouts
+remain unchanged. **Install the APK over v1.1.0** to preserve settings;
+the Home Assistant integration stays at **v1.4.0**.
+
+After installation, verify that the dashboard stays open while sensor values
+arrive. If it still crashes, capture a new `adb logcat -d -v time -s
+AndroidRuntime:E` and report the updated stack trace.
+
 ## V1.4 — Native Home Assistant MDI icons
 
 **HA Frame Studio v1.4.0** now uses the same `mdi:name` icons as Home Assistant, instead of a fixed set of 20 custom vector icons. Select an icon using the native Home Assistant icon picker (when available) or enter its `mdi:` name directly. The **Automatic** option follows the current Home Assistant entity icon in Studio's live preview; **none** hides the icon.
