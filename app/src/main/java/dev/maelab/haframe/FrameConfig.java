@@ -17,6 +17,8 @@ final class FrameConfig {
     };
 
     String baseUrl = "";
+    String title = "HA FRAME";
+    String customCss = "";
     String[] labels = DEFAULT_LABELS.clone();
     String[] ids = new String[COUNT];
 
@@ -28,6 +30,8 @@ final class FrameConfig {
         SharedPreferences p = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
         FrameConfig config = new FrameConfig();
         config.baseUrl = p.getString("url", "").trim();
+        config.title = p.getString("dashboard_title", "HA FRAME");
+        config.customCss = p.getString("custom_css", "");
         for (int i = 0; i < COUNT; i++) {
             config.labels[i] = p.getString("label_" + i, DEFAULT_LABELS[i]).trim();
             config.ids[i] = p.getString("entity_" + i, "").trim();
@@ -37,7 +41,9 @@ final class FrameConfig {
 
     void save(Context context) {
         SharedPreferences.Editor edit = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .edit().putString("url", baseUrl);
+            .edit().putString("url", baseUrl)
+            .putString("dashboard_title", title)
+            .putString("custom_css", customCss);
         for (int i = 0; i < COUNT; i++) {
             edit.putString("label_" + i, labels[i]);
             edit.putString("entity_" + i, ids[i]);
