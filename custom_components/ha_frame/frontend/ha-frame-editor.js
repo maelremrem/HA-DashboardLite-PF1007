@@ -658,6 +658,7 @@ class HaFrameVisualEditor extends HTMLElement {
       this._frameOptions() + "</select><button data-action='reload' title='Relire la configuration du cadre'>↻ Actualiser</button></div></div>" +
       "<div class='row toolbar'>" +
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
+      "<button data-action='photos'>Photos / Veille</button>" +
       "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
       "<button data-action='undo' title='Annuler (Ctrl/Cmd+Z)' aria-label='Annuler la dernière modification'" +
@@ -883,6 +884,29 @@ class HaFrameVisualEditor extends HTMLElement {
         Object.entries(TYPOGRAPHY).map(([id,p])=>option(id,p.label,readTypography(this._config.custom_css))).join("") +
         "</select></label>" +
         "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
+    } else if (this._panel === "photos") {
+      const opts = this._config.slideshow || {
+        enabled:false,idle_seconds:300,interval_seconds:30,show_clock:true,
+        source:"local",camera_entity:""
+      };
+      html = "<div class='inspector-head'><strong>Mode photo et veille</strong></div>" +
+        "<label class='field'><span>Activer le diaporama</span><input type='checkbox' data-bind='photo-enabled'" +
+          (opts.enabled?" checked":"") + "></label>" +
+        "<label class='field'>Début après inactivité (secondes)<input type='number' data-bind='photo-idle' min='30' max='3600' value='" +
+          esc(opts.idle_seconds) + "'></label>" +
+        "<label class='field'>Intervalle (secondes)<input type='number' data-bind='photo-interval' min='5' max='300' value='" +
+          esc(opts.interval_seconds) + "'></label>" +
+        "<label class='field'>Source<select data-bind='photo-source'>" +
+          option("local","Photos locales sur le cadre",opts.source) +
+          option("camera","Caméra Home Assistant",opts.source) + "</select></label>" +
+        (opts.source==="camera" ? "<label class='field'>Entité caméra<input data-bind='photo-camera' " +
+          "list='ha-frame-entities' placeholder='camera.salon' value='" +
+          esc(opts.camera_entity||"") + "'></label>" : "") +
+        "<label class='field'><span>Horloge sur les photos</span><input type='checkbox' data-bind='photo-clock'" +
+          (opts.show_clock?" checked":"") + "></label>" +
+        "<p class='hint'>Photos locales : copie des JPG/PNG (maximum 6 Mo chacun) dans " +
+        "Android/data/dev.maelab.haframe/files/Pictures/HAFrame/ sur le cadre. " +
+        "Le défilement est suspendu pendant la veille noire. Source caméra : image authentifiée via HA.</p>";
     } else if (this._panel === "layouts") {
       html = "<div class='inspector-head'><strong>Modèles de disposition</strong></div>" +
         "<p class='hint'>Ajoute une page ou remplace la page actuelle. Les tuiles sont pré-remplies sans entités : associe-les ensuite à Home Assistant.</p>" +
@@ -1075,7 +1099,7 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     if (["columns","card-type","card-icon","card-colspan","card-rowspan",
       "page-auto-operator","tap-action","long-press","history-hours",
-      "rule-operator","rule-hide"].includes(target.dataset.bind)) {
+      "rule-operator","rule-hide","photo-enabled","photo-clock","photo-source"].includes(target.dataset.bind)) {
       this._input(event);
       this._inspector();
     }
@@ -1085,6 +1109,21 @@ class HaFrameVisualEditor extends HTMLElement {
     const target = event.target, bind = target.dataset.bind;
     if (!bind || bind === "preset" || !this._config) return;
     const page = this._pageObject(), tile = this._tileObject();
+    if (bind.startsWith("photo-")) {
+      const options = this._config.slideshow ||= {
+        enabled:false,idle_seconds:300,interval_seconds:30,
+        show_clock:true,source:"local",camera_entity:""
+      };
+      if (bind === "photo-enabled") options.enabled = target.checked;
+      if (bind === "photo-clock") options.show_clock = target.checked;
+      if (bind === "photo-idle") options.idle_seconds = Number(target.value);
+      if (bind === "photo-interval") options.interval_seconds = Number(target.value);
+      if (bind === "photo-source") options.source = target.value;
+      if (bind === "photo-camera") options.camera_entity = target.value.trim();
+      this._mark();
+      this._preview();
+      return;
+    }
     if (bind === "title") this._config.dashboard_title = target.value;
     else if (bind === "css") this._config.custom_css = target.value;
     else if (bind === "page-title") page.title = target.value;
@@ -1248,6 +1287,18 @@ class HaFrameVisualEditor extends HTMLElement {
     if (!cfg.dashboard_title.trim() || cfg.dashboard_title.length > 28) return "Titre du dashboard : 1 à 28 caractères";
     if (cfg.custom_css.length > 12000) return "CSS : 12 000 caractères maximum";
     if (!cfg.pages.length || cfg.pages.length > 4) return "1 à 4 pages requises";
+    if (cfg.slideshow) {
+      const v=cfg.slideshow;
+      if (typeof v.enabled!=="boolean" || typeof v.show_clock!=="boolean" ||
+          !Number.isInteger(v.idle_seconds) || v.idle_seconds<30 || v.idle_seconds>3600 ||
+          !Number.isInteger(v.interval_seconds) || v.interval_seconds<5 || v.interval_seconds>300 ||
+          !["local","camera"].includes(v.source) ||
+          (v.source==="camera" && !/^camera\.[a-z0-9_]+$/.test(v.camera_entity||""))) {
+        return "Paramètres du diaporama invalides";
+      }
+      const active=this._frames.find(f=>f.entry_id===this._frameId);
+      if (!supportsAdvancedApk(active?.version)) return "Diaporama : APK Android v1.2.0 requis";
+    }
     for (const page of cfg.pages) {
       if (!page.title.trim() || page.title.length > 32) return "Titre de page invalide";
       if (![2,3,4].includes(page.columns) || page.cards.length > page.columns * 3) return "Trop de tuiles pour la grille";
@@ -1394,7 +1445,7 @@ class HaFrameVisualEditor extends HTMLElement {
       if (this._dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
       return this._open();
     }
-    if (action === "appearance" || action === "css" || action === "layouts") {
+    if (action === "appearance" || action === "css" || action === "layouts" || action === "photos") {
       this._panel = action; this._tile = -1; this._render(); return;
     }
     if (action === "page-panel") {this._panel="page";this._tile=-1;this._render();return;}
