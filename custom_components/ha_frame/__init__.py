@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import FrameApi, FrameApiError
 from .const import DOMAIN, PLATFORMS
 from .editor_ws import async_register_editor_commands
-from .frontend_resource import async_register_editor_frontend
+from .frontend_resource import async_register_editor_frontend, async_register_studio_panel
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,9 +43,14 @@ class FrameCoordinator(DataUpdateCoordinator):
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     async_register_editor_commands(hass)
+
+    async def setup_studio_frontend():
+        await async_register_editor_frontend(hass)
+        await async_register_studio_panel(hass)
+
     @callback
     def register_visual_editor(_event=None):
-        hass.async_create_task(async_register_editor_frontend(hass))
+        hass.async_create_task(setup_studio_frontend())
 
     if hass.state == CoreState.running:
         register_visual_editor()
