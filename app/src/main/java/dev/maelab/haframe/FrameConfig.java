@@ -29,6 +29,7 @@ final class FrameConfig {
         String foreground = "";
         String accent = "";
         String icon = "";
+        String iconPath = "";
         int radius = -1;
 
         Card(String type, String label, String entityId) {
@@ -49,6 +50,7 @@ final class FrameConfig {
             if (radius >= 0) style.put("radius", radius);
             if (style.length() > 0) item.put("style", style);
             if (!icon.isEmpty()) item.put("icon", icon);
+            if (!iconPath.isEmpty()) item.put("icon_path", iconPath);
             return item;
         }
     }
@@ -162,8 +164,19 @@ final class FrameConfig {
                     (Float.isNaN(card.max) || Float.isInfinite(card.max)) || card.max <= card.min ||
                     card.max - card.min > 1000000f) throw new IllegalArgumentException("Invalid gauge range");
                 card.icon = item.optString("icon", "");
+                card.iconPath = item.optString("icon_path", "");
                 if (!TileIcon.supported(card.icon)) {
-                    throw new IllegalArgumentException("Invalid tile icon");
+                    throw new IllegalArgumentException("Invalid MDI icon");
+                }
+                if (!TileIcon.validPath(card.iconPath)) {
+                    throw new IllegalArgumentException("Invalid MDI path");
+                }
+                if (!card.iconPath.isEmpty() && !card.icon.startsWith("mdi:") &&
+                    !card.icon.isEmpty() && !"none".equals(card.icon)) {
+                    throw new IllegalArgumentException("MDI path with legacy icon");
+                }
+                if (card.icon.startsWith("mdi:") && card.iconPath.isEmpty()) {
+                    throw new IllegalArgumentException("MDI icon is missing path data");
                 }
                 if ("camera".equals(type) && !entity.isEmpty() && !entity.startsWith("camera.")) {
                     throw new IllegalArgumentException("Camera cards require a camera entity");
