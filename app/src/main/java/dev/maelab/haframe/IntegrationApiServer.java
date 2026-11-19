@@ -38,6 +38,8 @@ final class IntegrationApiServer {
     static final String ACTION_DISPLAY = "dev.maelab.haframe.DISPLAY_UPDATED";
     static final String ACTION_NOTIFY = "dev.maelab.haframe.NOTIFY";
     static final String ACTION_WAKE = "dev.maelab.haframe.WAKE";
+    static final String ACTION_RELOAD = "dev.maelab.haframe.RELOAD";
+    private static volatile long lastScreenshotAt;
     static final int PORT = 8766;
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile IntegrationApiServer current;
@@ -245,7 +247,30 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("GET".equals(req.method) && "/api/v1/status".equals(req.path)) {
+                if ("GET".equals(req.method) && "/api/v1/screenshot".equals(req.path)) {
+                    long now = SystemClock.elapsedRealtime();
+                    synchronized (IntegrationApiServer.class) {
+                        if (now - lastScreenshotAt < 5000L) {
+                            send(out, 400, new JSONObject().put("error", "Screenshot cooldown"));
+                            return;
+                        }
+                        lastScreenshotAt = now;
+                    }
+                    try {
+                        send(out, 200, new JSONObject().put("format", "image/jpeg")
+                            .put("width", 640).put("height", 400)
+                            .put("data", DashboardSnapshot.capture()));
+                    } catch (Exception ignored) {
+                        send(out, 400, new JSONObject().put("error", "Screenshot unavailable"));
+                    }
+                } else if ("POST".equals(req.method) && "/api/v1/reload".equals(req.path)) {
+                    JSONObject request = new JSONObject(req.body);
+                    if (!"reload_dashboard".equals(request.optString("action"))) {
+                        throw new IllegalArgumentException("Explicit reload action required");
+                    }
+                    context.sendBroadcast(new Intent(ACTION_RELOAD).setPackage(context.getPackageName()));
+                    send(out, 200, new JSONObject().put("ok", true));
+                } else if ("GET".equals(req.method) && "/api/v1/status".equals(req.path)) {
                     JSONObject data = DisplayPrefs.load(context).toJson();
                     JSONObject diagnostics = DeviceDiagnostics.snapshot(context);
                     for (Iterator<String> keys = diagnostics.keys(); keys.hasNext();) {
