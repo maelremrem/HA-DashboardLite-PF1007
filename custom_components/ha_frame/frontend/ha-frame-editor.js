@@ -197,7 +197,7 @@ const attr = (object) => Object.entries(object).map(([key, val]) => key + ":" + 
 function nativeCss(css) {
   const result = {};
   const vars = {};
-  for (const match of String(css || "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  for (const match of String(css || "").replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selectors = match[1].split(",").map((item) => item.trim());
     const declarations = match[2].split(";");
     for (const item of declarations) {
