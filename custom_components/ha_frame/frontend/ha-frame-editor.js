@@ -378,6 +378,8 @@ const STYLE = [
   ".tile-camera{flex:1;display:grid;place-items:center;text-align:center;min-height:0;margin:1cqw 0;background:#020911;border-radius:6px;font-size:clamp(8px,1.3cqw,16px);opacity:.9;position:relative;overflow:hidden}",
   ".camera-dot{position:absolute;top:7px;left:8px;font-size:clamp(7px,.95cqw,12px);color:#ff7171}",
   ".tile-graph{width:100%;height:36%;min-height:10px;flex:1 1 auto;overflow:hidden}.tile-graph polyline{fill:none;stroke:currentColor;stroke-width:3;vector-effect:non-scaling-stroke}",
+  ".tile-circle{width:70%;height:48%;margin:auto;flex:1 1 auto;overflow:hidden}",
+
   ".bar{flex:0 0 auto;height:clamp(2px,.45cqw,6px);background:#ffffff2c;border-radius:99px;overflow:hidden}.bar>i{display:block;height:100%;background:#67dbba;border-radius:inherit}",
   ".inspector{padding:17px 18px;border-left:1px solid var(--divider-color,#ddd);min-width:0}",
   ".inspector-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}",
@@ -747,22 +749,49 @@ class HaFrameVisualEditor extends HTMLElement {
       } else if (tile.type === "camera") {
         value = "Caméra";
         hint = tile.entity_id ? "Flux MJPEG depuis Home Assistant · 1 image/s" : "Choisir une entité camera.*";
+      } else if (tile.type === "calendar") {
+        value = attrs.message || raw;
+        hint = attrs.start_time || "Prochain événement";
+      } else if (tile.type === "todo") {
+        value = raw === "—" ? "—" : raw + " tâches";
+        hint = "Liste Home Assistant";
+      } else if (tile.type === "bambu") {
+        value = raw;
+        percent = Number.isFinite(Number(attrs.progress)) ? Number(attrs.progress) : null;
+        hint = attrs.remaining_time || attrs.friendly_name || "Imprimante 3D";
+      } else if (["energy","air_quality"].includes(tile.type)) {
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+      } else if (tile.type === "presence") {
+        value = ["home","on"].includes(raw) ? "Présent" : raw === "—" ? "—" : "Absent";
+        hint = attrs.friendly_name || tile.entity_id;
+      } else if (tile.type === "circular_gauge") {
+        const n=Number(raw), low=Number(tile.min || 0), high=Number(tile.max==null?100:tile.max);
+        percent=raw!=="—" && Number.isFinite(n) && high>low ? Math.max(0,Math.min(100,100*(n-low)/(high-low))) : 0;
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+      } else if (tile.type === "history") {
+        value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
+        hint = "Historique " + (tile.history_hours || 24) + "h récupéré sur le PF1007";
       }
       const slot = tile.type === "metric"
         ? ".metric-" + page.cards.slice(0,i+1).filter(t=>t.type==="metric").length
         : ".control-" + page.cards.slice(0,i+1).filter(t=>t.type!=="metric").length;
       const individual = tile.style || {};
+      const conditionTrue = matchesRule(tile.rule, states);
+      const hidden = conditionTrue && tile.rule && tile.rule.hide;
+      const conditionalBackground = conditionTrue && tile.rule && tile.rule.background || "";
       const tileCss = css(".card", "." + tile.type, slot, isOn ? ".control.on" : "");
       const labelCss = css(".metric-label", "." + tile.type, slot);
       const valueCss = css(".metric-value", "." + tile.type, slot);
       const custom = [
-        individual.background ? "background-color:" + individual.background : "",
+        conditionalBackground ? "background-color:" + conditionalBackground : 
+          individual.background ? "background-color:" + individual.background : "",
         individual.foreground ? "color:" + individual.foreground : "",
         Number.isInteger(individual.radius) ? "border-radius:" + individual.radius*scale + "px" : ""
       ].filter(Boolean).join(";");
       const labelColor = individual.foreground ? "color:" + individual.foreground : "";
       const accent = individual.accent || "#67dbba";
-      const bar = percent == null ? "" : "<div class='bar'><i style='width:" +
+      const bar = percent == null || tile.type === "circular_gauge" ? "" :
+        "<div class='bar'><i style='width:" +
         Math.max(0,Math.min(100,Number(percent)||0)) + "%;background:" + accent + "'></i></div>";
       const cell = layout.cells[i];
       const selected = this._tile === i;
@@ -776,17 +805,22 @@ class HaFrameVisualEditor extends HTMLElement {
             "' title='" + title + "'" + (disabled ? " disabled" : "") + ">" + symbol + "</button>").join("") +
         "</div>";
       const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
+      const ring = tile.type === "circular_gauge" ? "<svg class='tile-circle' viewBox='0 0 100 100' aria-hidden='true'>" +
+        "<circle cx='50' cy='50' r='39' stroke='#70839855' stroke-width='9' fill='none'/>" +
+        "<circle cx='50' cy='50' r='39' stroke='" + accent + "' stroke-width='9' fill='none' " +
+        "stroke-dasharray='" + (Math.max(0,Math.min(100,percent||0))*2.45).toFixed(1) + " 245' " +
+        "stroke-linecap='round' transform='rotate(-90 50 50)'/></svg>" : "";
       const camera = tile.type === "camera" ? "<div class='tile-camera' aria-label='Flux vidéo' >" +
         "<span class='camera-dot'>● LIVE</span><span>Aperçu MJPEG sur le cadre</span></div>" : "";
       return "<div class='screen-tile" + (this._tile===i?" selected":"") +
         "' data-tile='" + i + "' role='button' tabindex='0' draggable='true' style='" +
-        tileCss + ";" + custom + ";grid-column:" + (cell.col+1) + " / span " + cell.w +
+        tileCss + ";" + custom + (hidden ? ";opacity:.18" : "") + ";grid-column:" + (cell.col+1) + " / span " + cell.w +
         ";grid-row:" + (cell.row+1) + " / span " + cell.h + "'>" +
         icon + "<div class='tile-label' style='" + labelCss + ";" + labelColor + "'>" +
         esc(tile.label || tile.type) + "</div>" +
         (tile.type === "camera" ? camera : "<div class='tile-value' style='" + valueCss + ";" + labelColor + "'>" +
         esc(value) + "</div>") +
-        (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
+        ring + (graph ? graph.replace("<svg class=", "<svg style='color:" + accent + "' class=") : "") + bar +
         "<div class='tile-hint' style='" + labelColor + "'>" + esc(hint) + "</div>" +
         controls + "</div>";
     }).join("");
