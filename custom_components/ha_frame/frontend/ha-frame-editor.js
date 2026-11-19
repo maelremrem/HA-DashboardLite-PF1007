@@ -379,6 +379,8 @@ const STYLE = [
   ".camera-dot{position:absolute;top:7px;left:8px;font-size:clamp(7px,.95cqw,12px);color:#ff7171}",
   ".tile-graph{width:100%;height:36%;min-height:10px;flex:1 1 auto;overflow:hidden}.tile-graph polyline{fill:none;stroke:currentColor;stroke-width:3;vector-effect:non-scaling-stroke}",
   ".tile-circle{width:70%;height:48%;margin:auto;flex:1 1 auto;overflow:hidden}",
+  ".diagnostics{display:grid;gap:0}.diagnostic-row{display:flex;gap:12px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--divider-color,#ddd);font-size:12px}.diagnostic-row strong{font-size:12px;text-align:right;overflow-wrap:anywhere}.diagnostic-screenshot{width:100%;max-width:640px;height:auto;margin-top:12px;border:1px solid var(--divider-color,#ddd);border-radius:8px}",
+
 
   ".bar{flex:0 0 auto;height:clamp(2px,.45cqw,6px);background:#ffffff2c;border-radius:99px;overflow:hidden}.bar>i{display:block;height:100%;background:#67dbba;border-radius:inherit}",
   ".inspector{padding:17px 18px;border-left:1px solid var(--divider-color,#ddd);min-width:0}",
@@ -473,6 +475,8 @@ class HaFrameVisualEditor extends HTMLElement {
     this._styleClipboard = null;
     this._profiles = [];
     this._snapshots = [];
+    this._deviceStatus = null;
+    this._screenshot = "";
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -617,6 +621,8 @@ class HaFrameVisualEditor extends HTMLElement {
     const requestId = (this._loadSequence || 0) + 1;
     this._loadSequence = requestId;
     this._config = null;
+    this._deviceStatus = null;
+    this._screenshot = "";
     this._history = [];
     this._historyIndex = -1;
     this._revision = "";
@@ -662,6 +668,8 @@ class HaFrameVisualEditor extends HTMLElement {
       "<button data-action='appearance'>Thèmes</button><button data-action='css'>CSS personnalisé</button>" +
       "<button data-action='photos'>Photos / Veille</button>" +
       "<button data-action='profiles'>Profils / Sauvegardes</button>" +
+      "<button data-action='device'>Diagnostic</button>" +
+      "<button data-action='updates'>Mises à jour</button>" +
       "<button data-action='page-panel'>Page</button><button data-action='layouts'>Dispositions</button>" +
       "<button data-action='add-tile'>+ Tuile</button>" +
       "<button data-action='undo' title='Annuler (Ctrl/Cmd+Z)' aria-label='Annuler la dernière modification'" +
@@ -892,6 +900,38 @@ class HaFrameVisualEditor extends HTMLElement {
         Object.entries(TYPOGRAPHY).map(([id,p])=>option(id,p.label,readTypography(this._config.custom_css))).join("") +
         "</select></label>" +
         "<p class='hint'>Les formes ajoutent des règles CSS compatibles avec Android Canvas. Un nouveau thème remplace le CSS précédent après confirmation.</p>";
+    } else if (this._panel === "device" || this._panel === "updates") {
+      const values = this._deviceStatus || {};
+      const names = {
+        version:"APK", android_version:"Android", uptime_seconds:"Uptime (s)",
+        wifi_connected:"Wi-Fi connecté", wifi_ssid:"SSID", wifi_ip:"Adresse IP",
+        wifi_rssi_dbm:"Signal (dBm)", wifi_quality_percent:"Qualité (%)",
+        wifi_link_speed_mbps:"Vitesse réseau (Mbit/s)",
+        wifi_frequency_mhz:"Fréquence (MHz)", sleeping:"Veille",
+        effective_brightness:"Luminosité", lux:"Éclairement", lux_source:"Source lux",
+        signing_cert_sha256:"Empreinte de signature APK"
+      };
+      const info = Object.keys(names).filter(key=>values[key]!=null).map(key=>
+        "<div class='diagnostic-row'><span>" + esc(names[key]) + "</span><strong>" +
+        esc(values[key]) + "</strong></div>").join("");
+      html = "<div class='inspector-head'><strong>" +
+        (this._panel==="device"?"Diagnostic du cadre":"Maintenance et mises à jour") +
+        "</strong></div>" +
+        "<div class='diagnostics'>" + (info||"Aucune donnée chargée") + "</div>" +
+        "<div class='actions'><button data-action='diagnostics-refresh'>Actualiser</button>" +
+        (this._panel==="device" ?
+          "<button data-action='capture'>Capture d’écran</button>" +
+          "<button data-action='reload-dashboard'>Recharger le dashboard</button>" : "") +
+        "</div>" +
+        (this._panel==="device" && this._screenshot ?
+          "<img class='diagnostic-screenshot' alt='Capture récente du cadre' src='data:image/jpeg;base64," +
+          this._screenshot + "'>" : "") +
+        (this._panel==="updates" ?
+          "<p class='hint'>Mise à jour sécurisée : vérifie l’empreinte de signature de l’APK, " +
+          "puis installe la nouvelle version depuis Fedora avec adb install -r. " +
+          "L’installation distante automatique reste désactivée tant qu’une signature stable et un mécanisme de récupération n’ont pas été validés sur l’appareil.</p>" :
+          "<p class='hint'>L’image est uniquement récupérée sur demande via le LAN authentifié, en JPEG 640×400. " +
+          "Recharger redémarre l’affichage de l’application, pas Android.</p>");
     } else if (this._panel === "profiles") {
       html = "<div class='inspector-head'><strong>Profils et restaurations</strong></div>" +
         "<p class='hint'>Les profils enregistrent seulement le dashboard et le CSS, jamais les jetons Home Assistant. Appliquer un profil ne modifie pas le cadre tant que tu ne cliques pas sur Enregistrer.</p>" +
