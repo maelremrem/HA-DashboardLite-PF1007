@@ -24,6 +24,8 @@ public final class MainActivity extends Activity implements HaClient.Listener {
                 if (ambient != null) ambient.refresh();
                 String now = DisplayPrefs.load(MainActivity.this).luxEntityId;
                 if (!now.equals(subscribedLuxEntity)) reload();
+            } else if (IntegrationApiServer.ACTION_RELOAD.equals(action)) {
+                reload();
             } else if (IntegrationApiServer.ACTION_WAKE.equals(action)) {
                 if (ambient != null) ambient.temporaryWake(120000L);
             } else if (IntegrationApiServer.ACTION_NOTIFY.equals(action)) {
@@ -69,11 +71,13 @@ public final class MainActivity extends Activity implements HaClient.Listener {
             }
         });
         setContentView(dashboard);
+        DashboardSnapshot.attach(dashboard);
         ambient = new AmbientController(this, dashboard);
         IntentFilter apiFilter = new IntentFilter();
         apiFilter.addAction(IntegrationApiServer.ACTION_DISPLAY);
         apiFilter.addAction(IntegrationApiServer.ACTION_NOTIFY);
         apiFilter.addAction(IntegrationApiServer.ACTION_WAKE);
+        apiFilter.addAction(IntegrationApiServer.ACTION_RELOAD);
         registerReceiver(apiUpdates, apiFilter);
         registerReceiver(configUpdated, new IntentFilter(ConfigWebServer.ACTION_CONFIG_UPDATED));
     }
@@ -147,6 +151,7 @@ public final class MainActivity extends Activity implements HaClient.Listener {
     }
 
     @Override protected void onDestroy() {
+        DashboardSnapshot.detach();
         unregisterReceiver(apiUpdates);
         unregisterReceiver(configUpdated);
         super.onDestroy();
