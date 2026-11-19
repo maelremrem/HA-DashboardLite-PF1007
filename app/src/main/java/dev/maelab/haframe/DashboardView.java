@@ -1,6 +1,7 @@
 package dev.maelab.haframe;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Path;
@@ -83,10 +84,11 @@ final class DashboardView extends View {
         feedbackCard = -1;
         try { theme = CanvasTheme.parse(config.customCss); }
         catch (IllegalArgumentException ignored) { theme = CanvasTheme.parse(""); }
+        refreshCamera();
         invalidate();
     }
-    void setClient(HaClient client) { this.client = client; invalidate(); }
-    void setSleeping(boolean sleep) { if (sleeping != sleep) { sleeping = sleep; invalidate(); } }
+    void setClient(HaClient client) { this.client = client; refreshCamera(); invalidate(); }
+    void setSleeping(boolean sleep) { if (sleeping != sleep) { sleeping = sleep; refreshCamera(); invalidate(); } }
     void showNotification(String title, String message, int seconds) {
         notificationTitle = title;
         notificationMessage = message;
@@ -101,12 +103,29 @@ final class DashboardView extends View {
         invalidate();
     }
 
+    private void refreshCamera() {
+        if (client == null) return;
+        String selected = "";
+        if (!sleeping && !config.pages.isEmpty()) {
+            FrameConfig.Page page = config.pages.get(pageIndex);
+            for (FrameConfig.Card card : page.cards) {
+                if ("camera".equals(card.type) && card.entityId.startsWith("camera.")) {
+                    selected = card.entityId;
+                    break; // One stream per page avoids overloading Android 6 hardware.
+                }
+            }
+        }
+        client.selectCamera(selected);
+    }
+
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         refreshClock.run();
+        refreshCamera();
     }
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(refreshClock);
+        if (client != null) client.selectCamera("");
         removeCallbacks(endFeedback);
         removeCallbacks(endNotification);
         super.onDetachedFromWindow();
@@ -304,7 +323,7 @@ final class DashboardView extends View {
             FrameConfig.Card card = page.cards.get(i);
             boolean metric = "metric".equals(card.type);
             boolean actionable = !metric && !"gauge".equals(card.type) &&
-                !"graph".equals(card.type) && !"weather".equals(card.type);
+                !"graph".equals(card.type) && !"weather".equals(card.type) && !"camera".equals(card.type);
             String slot = metric ? ".metric-" + (++metricNumber) : ".control-" + (++controlNumber);
             float x = cardLeft(page, i), y = cardTop(page, i);
             float w = tileWidth(page, i), h = tileHeight(page, i);
@@ -324,9 +343,11 @@ final class DashboardView extends View {
             rect(canvas, x, y, w, h, radius, customColor(card.background, background));
             canvas.save();
             canvas.clipRect(x + 1, y + 1, x + w - 1, y + h - 1);
+            String icon = TileIcon.effective(card.icon, card.type);
+            TileIcon.draw(canvas, paint, icon, card.type, x + w - 52, y + 15, 28, accent);
             text(canvas, card.label.isEmpty() ? card.entityId : card.label, x + 20, y + 39,
                 theme.size(20, "font-size", ".metric-label", category, slot),
-                secondary, false, w - 40);
+                secondary, false, w - (icon.isEmpty() ? 40 : 83));
             String unavailable = card.entityId.isEmpty() ? "À configurer" : !connected ? "Hors ligne" : "En attente…";
             if (!valid) {
                 text(canvas, unavailable, x + 20, y + h - 27, 21, secondary, true, w - 40);
@@ -345,6 +366,23 @@ final class DashboardView extends View {
                     x + 20, y + 94, 35, TEXT, true, w - 40);
                 float pct = 100f * (value - card.min) / (card.max - card.min);
                 bar(canvas, x + 20, y + h - 32, w - 40, pct, accent);
+            } else if ("camera".equals(card.type)) {
+                Bitmap frame = client == null ? null : client.cameraFrame(card.entityId);
+                if (frame != null && !frame.isRecycled()) {
+                    float left = x + 12, top = y + 47, boxW = w - 24, boxH = h - 60;
+                    float factor = Math.min(boxW / frame.getWidth(), boxH / frame.getHeight());
+                    float videoW = frame.getWidth() * factor;
+                    float videoH = frame.getHeight() * factor;
+                    paint.setColor(0xFFFFFFFF);
+                    paint.setFilterBitmap(true);
+                    canvas.drawBitmap(frame, null, new RectF(left + (boxW-videoW)/2f,
+                        top + (boxH-videoH)/2f,
+                        left + (boxW+videoW)/2f,
+                        top + (boxH+videoH)/2f), paint);
+                } else {
+                    text(canvas, "Connexion caméra…", x + 20, y + h/2f,
+                        21, secondary, false, w - 40);
+                }
             } else if ("weather".equals(card.type)) {
                 double temperature = state.attributes.optDouble("temperature", Double.NaN);
                 String summary = weatherLabel(state.state);
@@ -415,6 +453,7 @@ final class DashboardView extends View {
         touchedCard = -1;
         feedbackCard = -1;
         performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        refreshCamera();
         invalidate();
     }
 
@@ -473,7 +512,8 @@ final class DashboardView extends View {
                 if (selected < 0 || selected != cardAt(x, y)) return true;
                 FrameConfig.Card card = config.pages.get(pageIndex).cards.get(selected);
                 if ("metric".equals(card.type) || "gauge".equals(card.type) ||
-                    "weather".equals(card.type) || "graph".equals(card.type)) return true;
+                    "weather".equals(card.type) || "graph".equals(card.type) ||
+                    "camera".equals(card.type)) return true;
                 if (card.entityId.isEmpty()) { callbacks.settings(); return true; }
                 long now = SystemClock.elapsedRealtime();
                 if (card.entityId.equals(lastCommandId) && now - lastCommandAt < 700L) return true;
