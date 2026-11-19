@@ -6,9 +6,9 @@ A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the P
 
 The Android APK and the Home Assistant integration are separate installs.
 
-- **Android / Fedora:** `git clone`, switch to the v0.7 branch, then run `bash scripts/build-fedora.sh`. Avoid `sudo` for the build.
+- **Android / Fedora:** `git clone`, use the `main` branch (v0.7), then run `bash scripts/build-fedora.sh`. Avoid `sudo` for the build.
 - **Home Assistant:** the integration is under `custom_components/ha_frame/`, with `hacs.json` for Marketplace/HACS support.
-- **Important:** Home Assistant 2026.11+ Marketplace requires a **public repository** with the integration files on its default branch or a compatible release. This repository is currently **private**, and v0.7 is on a test branch, so Marketplace installation cannot work yet. Use a private Git checkout as documented until those conditions change.
+- **Marketplace / HACS:** The v0.7 integration and `hacs.json` are on `main`. The repository must be **public** for installation from the Home Assistant Marketplace; if it is private, make it public in GitHub's repository settings or install manually from a Git checkout.
 
 See [install from GitHub / Marketplace](docs/marketplace-installation.md) for both options.
 
