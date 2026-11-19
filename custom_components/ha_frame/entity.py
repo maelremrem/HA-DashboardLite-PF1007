@@ -14,5 +14,5 @@ class FrameEntity(CoordinatorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.data["device_id"])},
             name="HA Frame PF1007", manufacturer="HA Frame", model="PF1007",
-            sw_version=coordinator.data.get("version", "0.7.0"),
+            sw_version=coordinator.data.get("version"),
         )
