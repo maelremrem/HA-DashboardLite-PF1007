@@ -15,3 +15,15 @@ dialog{width:min(680px,95vw);max-height:88vh;background:#172234;border:1px solid
 .reorder{display:flex;gap:4px}
 .reorder button{padding:4px 10px;min-width:32px;font-size:17px;line-height:1.4}
 .reorder button:disabled{opacity:.3;cursor:not-allowed}
+
+.themePanel p code{color:#8fe7d2;background:#111b28;padding:2px 4px;border-radius:4px}
+.themePanel a{color:#91e1ff;text-decoration:underline}
+.themeToolbar{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:15px 0 18px}
+.themeToolbar>div{min-width:175px;flex:1}
+.themeToolbar button{min-height:44px}
+select,textarea{border:1px solid #34435a;background:#101827;color:#f5f7fc;border-radius:10px;padding:12px 13px;font-size:15px}
+select{width:100%}
+textarea{width:100%;max-width:100%;min-width:100%;min-height:230px;line-height:1.6;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;tab-size:2}
+textarea:focus,select:focus{outline:2px solid #71cfb7}
+.displaySettings input{max-width:460px}
+@media(max-width:600px){.themeToolbar{flex-direction:column;align-items:stretch}.themeToolbar>div,.themeToolbar button{width:100%}}
