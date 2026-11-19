@@ -8,7 +8,7 @@ const vm = require("node:vm");
 const file = path.join(__dirname,
   "../custom_components/ha_frame/frontend/ha-frame-studio-panel.js");
 const source = fs.readFileSync(file, "utf8");
-assert.match(source, /^import "\.\/ha-frame-editor\.js\?v=1\.1\.0";/);
+assert.match(source, /^import "\.\/ha-frame-editor\.js\?v=1\.1\.0";/m);
 
 const editor = {
   setConfig(value) { this.config = value; },
@@ -43,7 +43,7 @@ const sandbox = {
     get(name) { return registered.get(name); },
   },
 };
-vm.runInNewContext(source.replace(/^import[^\n]*\n/, ""), sandbox);
+vm.runInNewContext(source.replace(/^import[^\n]*\n/m, ""), sandbox);
 
 const Panel = registered.get("ha-frame-studio-panel");
 assert.ok(Panel);
