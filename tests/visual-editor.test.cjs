@@ -19,7 +19,7 @@ const sandbox = {
   console
 };
 
-const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, withTypography, removeDesign, readShape, readTypography, gridPlacement, tileIconMarkup, ICON_OPTIONS, validTileStyle, isAdvancedPage, compatibleVersion })", sandbox);
+const editorApi = vm.runInNewContext(src + "\n({ nativeCss, combine, clone, esc, PRESETS, PALETTE_THEMES, LAYOUT_TEMPLATES, templatePage, withShape, withTypography, removeDesign, readShape, readTypography, gridPlacement, tileIconMarkup, mdiIconName, MDI_REGEX, MDI_PATH_REGEX, validTileStyle, isAdvancedPage, compatibleVersion })", sandbox);
 assert.ok(registered.has("ha-frame-visual-editor"));
 assert.equal(sandbox.window.customCards[0].type, "ha-frame-visual-editor");
 assert.equal(Object.keys(editorApi.PRESETS).length, 14);
@@ -85,10 +85,13 @@ assert.equal(grid.cells[3].row, 2);
 assert.throws(()=>editorApi.gridPlacement({columns:2,cards:[
   {col_span:2},{col_span:2},{col_span:2},{col_span:2}
 ]}), /Pas assez/);
-assert.ok(editorApi.ICON_OPTIONS.length >= 20);
-assert.match(editorApi.tileIconMarkup("home","metric","#ffffff"), /viewBox/);
+assert.equal(editorApi.mdiIconName("light"), "mdi:lightbulb");
+assert.ok(editorApi.MDI_REGEX.test("mdi:home-thermometer"));
+assert.ok(!editorApi.MDI_REGEX.test("<svg>"));
+assert.ok(editorApi.MDI_PATH_REGEX.test("M12,2 L20,22 H4Z"));
+assert.match(editorApi.tileIconMarkup("home","metric","#ffffff"), /mdi:home/);
 assert.equal(editorApi.tileIconMarkup("none","metric","#ffffff"), "");
-assert.match(editorApi.tileIconMarkup("","camera","#ffffff"), /svg/);
+assert.match(editorApi.tileIconMarkup("","camera","#ffffff"), /mdi:camera/);
 assert.ok(editorApi.validTileStyle({background:"#abcdef",radius:12}));
 assert.ok(!editorApi.validTileStyle({background:"red"}));
 assert.ok(editorApi.isAdvancedPage({cards:[{type:"camera"}]}));
@@ -177,4 +180,22 @@ assert.match(src, /data-control='frame'/);
 assert.match(src, /_revision/);
 assert.doesNotMatch(src, /localStorage|sessionStorage|eval\(/);
 
-console.log("Visual editor static, security and theme tests passed.");
+// Validate MDI upgrade and generated, bounded SVG paths without changing saved config.
+instance._config.pages[0].cards[0].icon = "mdi:cctv";
+instance._frames[0].version = "1.0.0";
+assert.match(instance._validate(), /v1.1.0/);
+instance._frames[0].version = "1.1.0";
+assert.equal(instance._validate(), "");
+instance._config.pages[0].cards[0].icon = "mdi:cctv";
+instance._config.pages[0].cards[1].icon = "";
+instance._resolveIconPath = async (name, stateObj) => {
+  assert.ok(name === "mdi:cctv" || stateObj?.entity_id === "weather.home");
+  return "M12,2L20,22H4Z";
+};
+instance._prepareMdiConfig().then(prepared => {
+  assert.equal(prepared.pages[0].cards[0].icon, "mdi:cctv");
+  assert.equal(prepared.pages[0].cards[0].icon_path, "M12,2L20,22H4Z");
+  assert.equal(prepared.pages[0].cards[1].icon_path, "M12,2L20,22H4Z");
+  assert.equal(instance._config.pages[0].cards[0].icon_path, undefined);
+  console.log("Visual editor static, security and MDI tests passed.");
+}).catch(error => { console.error(error); process.exitCode = 1; });
