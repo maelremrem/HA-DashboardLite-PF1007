@@ -26,6 +26,14 @@ This release changes **only the HA integration**. The existing Android **v0.7 AP
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
 
+## V1.2 — Theme gallery and layout design in Studio
+
+Studio now offers **14 themes** (Original, Ocean, Amber, Light, Midnight, Forest, Lavender, Rose, Graphite, Solar, Arctic, Retro, Synthwave and Sand) with live color swatches and preview. Use **5 tile-corner styles** and **3 typography sizes**; the generated styling stays within Android's safe Canvas CSS subset. There are **6 layout templates** (Overview, Climate, Energy, Lights, Security and a 12-tile grid), with options to add a new page or replace the current one, plus **Duplicate page**. Templates contain unassigned entity placeholders to prevent accidental controls.
+
+- All changes remain local to the selected frame until you click **Save to this frame**. Replacement confirms before discarding existing card assignments.
+- Works with the existing **Android APK v0.9.0** via the Home Assistant Studio panel; no Android firmware upgrade or re-pairing required.
+- The source for the Android **local configuration web editor** also includes the new theme presets; using that particular dropdown requires an updated APK to be built and installed.
+
 ## V1.1 — HA Frame Studio sidebar and multiple frames
 
 **HA Frame Studio** now opens directly from the **Home Assistant sidebar** at `/ha-frame-studio`, with no manual Lovelace card or resource. It reuses the full visual editor: choose a paired PF1007 frame, see its **1280×800 preview**, click and rearrange tiles, customize pages, themes and native CSS, then save to that frame. Every frame has its own configuration.
