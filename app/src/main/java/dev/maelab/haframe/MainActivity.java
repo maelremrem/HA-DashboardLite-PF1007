@@ -45,6 +45,7 @@ public final class MainActivity extends Activity implements HaClient.Listener {
 
     @Override public void onCreate(Bundle bundle) {
         super.onCreate(bundle);
+        DiagnosticLog.add("Dashboard started");
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         fullscreen();
         dashboard = new DashboardView(this);
@@ -151,13 +152,19 @@ public final class MainActivity extends Activity implements HaClient.Listener {
     }
 
     @Override protected void onDestroy() {
+        DiagnosticLog.add("Dashboard stopped");
         DashboardSnapshot.detach();
         unregisterReceiver(apiUpdates);
         unregisterReceiver(configUpdated);
         super.onDestroy();
     }
 
+    private Boolean lastLoggedConnection;
     @Override public void onStatus(String status, boolean connected) {
+        if (lastLoggedConnection == null || lastLoggedConnection.booleanValue() != connected) {
+            DiagnosticLog.add(connected ? "HA connection online" : "HA connection offline");
+            lastLoggedConnection = connected;
+        }
         dashboard.setStatus(status, connected);
     }
 
