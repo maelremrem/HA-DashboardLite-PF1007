@@ -33,6 +33,7 @@ jobs:
         run: |
           node --check custom_components/ha_frame/frontend/ha-frame-editor.js
           node tests/visual-editor.test.cjs
+          node tests/studio-workflow.test.cjs
           node --check --input-type=module < custom_components/ha_frame/frontend/ha-frame-studio-panel.js
           node tests/studio-panel.test.cjs
 
