@@ -1,0 +1,169 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connecter HA Frame",
+        "description": "Activez l'intégration sur le cadre puis générez un code de jumelage valable 2 minutes.",
+        "data": {
+          "host": "Adresse IP du cadre",
+          "code": "Code de jumelage à six chiffres"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter au cadre ou code expiré"
+    },
+    "abort": {
+      "already_configured": "Ce cadre est déjà configuré"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configuration du tableau de bord",
+        "description": "Les modifications sont envoyées directement au cadre sur le réseau local.",
+        "menu_options": {
+          "appearance": "Titre et thèmes",
+          "css": "CSS personnalisé",
+          "pages": "Gérer les pages",
+          "tiles_page": "Organiser les tuiles",
+          "done": "Terminer"
+        }
+      },
+      "appearance": {
+        "title": "Apparence",
+        "description": "Conserver le CSS préserve votre style actuel. Un thème prédéfini remplace tout le CSS personnalisé.",
+        "data": {
+          "dashboard_title": "Titre du tableau de bord",
+          "theme": "Thème prédéfini"
+        }
+      },
+      "css": {
+        "title": "CSS Canvas personnalisé",
+        "description": "Seul le sous-ensemble CSS pris en charge par Canvas est accepté. Collez votre CSS ici (12 000 caractères maximum) ou laissez vide pour le réinitialiser.",
+        "data": {
+          "custom_css": "CSS"
+        }
+      },
+      "pages": {
+        "title": "Pages",
+        "menu_options": {
+          "page_add": "Ajouter une page",
+          "page_select": "Renommer / changer les colonnes",
+          "page_move": "Déplacer une page",
+          "page_remove": "Supprimer une page",
+          "init": "Retour aux réglages"
+        }
+      },
+      "page_add": {
+        "title": "Nouvelle page",
+        "data": {
+          "title": "Nom de la page",
+          "columns": "Colonnes"
+        }
+      },
+      "page_select": {
+        "title": "Choisir une page",
+        "data": {
+          "page": "Page"
+        }
+      },
+      "page_details": {
+        "title": "Modifier la page",
+        "description": "Trois rangées maximum : retirez des tuiles avant de réduire les colonnes si nécessaire.",
+        "data": {
+          "title": "Titre de la page",
+          "columns": "Colonnes"
+        }
+      },
+      "page_move": {
+        "title": "Déplacer une page",
+        "data": {
+          "page": "Page",
+          "direction": "Direction"
+        }
+      },
+      "page_remove": {
+        "title": "Supprimer une page",
+        "description": "Toutes les tuiles de cette page seront supprimées. Cette action est irréversible.",
+        "data": {
+          "page": "Page",
+          "confirm": "Confirmer la suppression"
+        }
+      },
+      "tiles_page": {
+        "title": "Choisir une page à modifier",
+        "data": {
+          "page": "Page"
+        }
+      },
+      "tiles": {
+        "title": "Tuiles",
+        "menu_options": {
+          "tile_add": "Ajouter une tuile",
+          "tile_select": "Modifier une tuile",
+          "tile_move": "Déplacer une tuile",
+          "tile_remove": "Supprimer une tuile",
+          "tiles_page": "Changer de page",
+          "init": "Retour aux réglages"
+        }
+      },
+      "tile_add": {
+        "title": "Ajouter une tuile",
+        "description": "Choisissez une entité grâce à la recherche Home Assistant. Min/max servent aux jauges.",
+        "data": {
+          "type": "Type de tuile",
+          "label": "Titre",
+          "entity_id": "Entité",
+          "clear_entity": "Laisser sans entité",
+          "min": "Minimum de jauge",
+          "max": "Maximum de jauge"
+        }
+      },
+      "tile_select": {
+        "title": "Choisir une tuile",
+        "data": {
+          "tile": "Tuile"
+        }
+      },
+      "tile_details": {
+        "title": "Modifier la tuile",
+        "description": "Pour vider l'entité existante, activez « Laisser sans entité ».",
+        "data": {
+          "type": "Type de tuile",
+          "label": "Titre",
+          "entity_id": "Entité",
+          "clear_entity": "Laisser sans entité",
+          "min": "Minimum de jauge",
+          "max": "Maximum de jauge"
+        }
+      },
+      "tile_move": {
+        "title": "Réorganiser une tuile",
+        "data": {
+          "tile": "Tuile",
+          "direction": "Direction"
+        }
+      },
+      "tile_remove": {
+        "title": "Supprimer une tuile",
+        "description": "La tuile sélectionnée sera retirée du tableau de bord.",
+        "data": {
+          "tile": "Tuile",
+          "confirm": "Confirmer la suppression"
+        }
+      },
+      "done": {
+        "title": "Terminé"
+      }
+    },
+    "error": {
+      "cannot_connect": "Cadre inaccessible. Vérifiez le Wi-Fi et l'intégration HA sur le PF1007.",
+      "invalid_config": "Configuration ou CSS refusé par le cadre. Vérifiez les champs et les propriétés CSS prises en charge.",
+      "limit_reached": "Nombre maximal de pages ou de tuiles atteint.",
+      "invalid_move": "Impossible de déplacer cet élément dans cette direction.",
+      "last_page": "Il faut conserver au moins une page.",
+      "not_confirmed": "Confirmez la suppression pour continuer."
+    }
+  }
+}
