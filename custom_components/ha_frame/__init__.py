@@ -7,7 +7,7 @@ import logging
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, CoreState, EVENT_HOMEASSISTANT_STARTED, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -43,7 +43,14 @@ class FrameCoordinator(DataUpdateCoordinator):
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     async_register_editor_commands(hass)
-    hass.async_create_task(async_register_editor_frontend(hass))
+    @callback
+    def register_visual_editor(_event=None):
+        hass.async_create_task(async_register_editor_frontend(hass))
+
+    if hass.state == CoreState.running:
+        register_visual_editor()
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, register_visual_editor)
 
     async def set_dashboard(call: ServiceCall) -> None:
         device_id = call.data["device_id"]
