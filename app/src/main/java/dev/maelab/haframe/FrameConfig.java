@@ -28,6 +28,7 @@ final class FrameConfig {
         String background = "";
         String foreground = "";
         String accent = "";
+        String icon = "";
         int radius = -1;
 
         Card(String type, String label, String entityId) {
@@ -47,6 +48,7 @@ final class FrameConfig {
             if (!accent.isEmpty()) style.put("accent", accent);
             if (radius >= 0) style.put("radius", radius);
             if (style.length() > 0) item.put("style", style);
+            if (!icon.isEmpty()) item.put("icon", icon);
             return item;
         }
     }
@@ -148,7 +150,7 @@ final class FrameConfig {
                 String entity = item.getString("entity_id").trim();
                 if ((!"metric".equals(type) && !"control".equals(type) && !"gauge".equals(type) &&
                      !"thermostat".equals(type) && !"light".equals(type) && !"cover".equals(type) &&
-                     !"weather".equals(type) && !"graph".equals(type)) ||
+                     !"weather".equals(type) && !"graph".equals(type) && !"camera".equals(type)) ||
                     label.length() > 48 ||
                     (!entity.isEmpty() && !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))) {
                     throw new IllegalArgumentException("Carte invalide : " + (k + 1));
@@ -159,6 +161,13 @@ final class FrameConfig {
                 if ((Float.isNaN(card.min) || Float.isInfinite(card.min)) ||
                     (Float.isNaN(card.max) || Float.isInfinite(card.max)) || card.max <= card.min ||
                     card.max - card.min > 1000000f) throw new IllegalArgumentException("Invalid gauge range");
+                card.icon = item.optString("icon", "");
+                if (!TileIcon.supported(card.icon)) {
+                    throw new IllegalArgumentException("Invalid tile icon");
+                }
+                if ("camera".equals(type) && !entity.isEmpty() && !entity.startsWith("camera.")) {
+                    throw new IllegalArgumentException("Camera cards require a camera entity");
+                }
                 card.colSpan = item.optInt("col_span", 1);
                 card.rowSpan = item.optInt("row_span", 1);
                 if (card.colSpan < 1 || card.colSpan > columns || card.rowSpan < 1 || card.rowSpan > 2) {
