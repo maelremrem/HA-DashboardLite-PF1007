@@ -10,7 +10,7 @@ import re
 
 MAX_PAGES = 4
 MAX_CARDS = 12
-CARD_TYPES = ("metric", "control", "gauge", "thermostat", "light", "cover")
+CARD_TYPES = ("metric", "control", "gauge", "thermostat", "light", "cover", "weather", "graph")
 ENTITY_ID = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 # Keep these presets aligned with app/src/main/assets/config/app.js.
@@ -72,6 +72,53 @@ for key, p in THEME_PALETTES.items():
 
 
 
+STYLE_KEYS = {"background", "foreground", "accent", "radius"}
+HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def card_grid(page: dict) -> tuple[list[tuple[int, int, int, int]], int]:
+    """Deterministic first-fit grid shared with Android's TileGrid.place."""
+    columns = page["columns"]
+    occupied = [[False] * columns for _ in range(3)]
+    placements = []
+    used_rows = 0
+    for card in page["cards"]:
+        width, height = card.get("col_span", 1), card.get("row_span", 1)
+        if type(width) is not int or type(height) is not int or not (1 <= width <= columns and 1 <= height <= 2):
+            raise ValueError("Invalid tile span")
+        found = None
+        for row in range(4 - height):
+            for col in range(columns - width + 1):
+                if all(not occupied[r][c]
+                       for r in range(row, row + height)
+                       for c in range(col, col + width)):
+                    found = (col, row)
+                    break
+            if found is not None:
+                break
+        if found is None:
+            raise ValueError("Tiles exceed the three-row grid")
+        col, row = found
+        for r in range(row, row + height):
+            for c in range(col, col + width):
+                occupied[r][c] = True
+        placements.append((col, row, width, height))
+        used_rows = max(used_rows, row + height)
+    return placements, max(1, used_rows)
+
+
+def validate_style(style: dict) -> None:
+    if not isinstance(style, dict) or set(style) - STYLE_KEYS:
+        raise ValueError("Unsupported tile style")
+    for key in ("background", "foreground", "accent"):
+        if key in style and (not isinstance(style[key], str) or not HEX_COLOR.fullmatch(style[key])):
+            raise ValueError("Invalid tile color")
+    if "radius" in style and (type(style["radius"]) is not int or not 0 <= style["radius"] <= 72):
+        raise ValueError("Invalid tile radius")
+
+
+
+
 def validate_pages(pages: list[dict]) -> None:
     """Match the limits enforced by FrameConfig.setPages on Android."""
     if not isinstance(pages, list) or not 1 <= len(pages) <= MAX_PAGES:
@@ -87,6 +134,8 @@ def validate_pages(pages: list[dict]) -> None:
         if not isinstance(cards, list) or len(cards) > min(MAX_CARDS, columns * 3):
             raise ValueError("At most three rows of cards per page")
         for card in cards:
+            if "style" in card:
+                validate_style(card["style"])
             if card.get("type") not in CARD_TYPES:
                 raise ValueError("Invalid card type")
             label = card.get("label")
@@ -101,6 +150,7 @@ def validate_pages(pages: list[dict]) -> None:
                 raise ValueError("Invalid gauge range") from exc
             if not all(map(isfinite, (minimum, maximum))) or maximum <= minimum or maximum - minimum > 1_000_000:
                 raise ValueError("Invalid gauge range")
+        card_grid(page)
 
 
 def move(items: list, index: int, direction: int) -> bool:
