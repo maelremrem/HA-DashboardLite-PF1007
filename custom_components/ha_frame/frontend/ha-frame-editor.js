@@ -230,6 +230,13 @@ function compatibleVersion(version) {
   const parts=String(version||"").match(/^v?(\d+)\.(\d+)\.(\d+)/);
   return Boolean(parts && Number(parts[1])>=1);
 }
+function supportsMdi(version) {
+  const parts = String(version || "").replace(/^v/, "").split(".");
+  if (parts.length !== 3 || parts.some(part=>!part || !/^[0-9]+$/.test(part))) return false;
+  const major = Number(parts[0]), minor = Number(parts[1]);
+  return major > 1 || (major === 1 && minor >= 1);
+}
+
 
 const LAYOUT_TEMPLATES = [
   {id:"overview", name:"Vue générale", columns:3, tiles:[
@@ -965,7 +972,7 @@ class HaFrameVisualEditor extends HTMLElement {
     }
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
     if (cfg.pages.some(page=>page.cards.some(tile=>MDI_REGEX.test(tile.icon || ""))) &&
-        (!frame || !/^v?1\\.(?:[1-9]|[1-9]\\d+)\\./.test(frame.version || ""))) {
+        (!frame || !supportsMdi(frame.version))) {
       return "Les icônes mdi: nécessitent l’APK Android v1.1.0 ou supérieur";
     }
     if (cfg.pages.some(isAdvancedPage) && frame && frame.version &&
@@ -1004,7 +1011,7 @@ class HaFrameVisualEditor extends HTMLElement {
   async _prepareMdiConfig() {
     const result = clone(this._config);
     const frame = this._frames.find(f=>f.entry_id===this._frameId);
-    const supported = frame && /^v?1\.(?:[1-9]|[1-9]\d+)\./.test(frame.version || "");
+    const supported = frame && supportsMdi(frame.version);
     if (!supported) return result;
     const resolved = new Map();
     for (const page of result.pages) {
