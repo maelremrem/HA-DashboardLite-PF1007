@@ -572,6 +572,14 @@ final class DashboardView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
+        if (!fullscreenCamera.isEmpty()) {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                fullscreenCamera = "";
+                refreshCamera();
+                invalidate();
+            }
+            return true;
+        }
         if (sleeping) {
             if (event.getActionMasked() == MotionEvent.ACTION_UP && callbacks != null) callbacks.wakeDisplay();
             return true;
@@ -580,6 +588,7 @@ final class DashboardView extends View {
         float y = (event.getY() - dy) / scale;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                pressedAt = SystemClock.elapsedRealtime();
                 startX = x;
                 startY = y;
                 touchedCard = cardAt(x, y);
@@ -625,6 +634,26 @@ final class DashboardView extends View {
                 }
                 if (selected < 0 || selected != cardAt(x, y)) return true;
                 FrameConfig.Card card = config.pages.get(pageIndex).cards.get(selected);
+                if (SystemClock.elapsedRealtime() - pressedAt >= 650L) {
+                    if ("settings".equals(card.longPress)) callbacks.settings();
+                    else if ("page_next".equals(card.longPress)) selectPage(pageIndex + 1);
+                    else if ("toggle".equals(card.longPress) && !card.entityId.isEmpty()) {
+                        callbacks.command(card.entityId);
+                    }
+                    return true;
+                }
+                if ("none".equals(card.tapAction)) return true;
+                if ("page_next".equals(card.tapAction)) { selectPage(pageIndex + 1); return true; }
+                if ("page_prev".equals(card.tapAction)) { selectPage(pageIndex - 1); return true; }
+                if ("settings".equals(card.tapAction)) { callbacks.settings(); return true; }
+                if ("camera".equals(card.type) || "camera_fullscreen".equals(card.tapAction)) {
+                    if ("camera".equals(card.type) && !card.entityId.isEmpty()) {
+                        fullscreenCamera = card.entityId;
+                        refreshCamera();
+                        invalidate();
+                    }
+                    return true;
+                }
                 if ("metric".equals(card.type) || "gauge".equals(card.type) ||
                     "weather".equals(card.type) || "graph".equals(card.type) ||
                     "camera".equals(card.type)) return true;
