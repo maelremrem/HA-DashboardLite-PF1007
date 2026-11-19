@@ -58,6 +58,11 @@ class FrameApi:
     async def wake(self) -> None:
         await self.call("POST", "/api/v1/wake", {})
 
+    async def logs(self) -> list[str]:
+        result = await self.call("GET", "/api/v1/logs")
+        events = result.get("events", [])
+        return [event for event in events if isinstance(event, str)][:60] if isinstance(events, list) else []
+
     async def screenshot(self) -> dict:
         """Receive a compressed, bounded JPEG (read-only)."""
         image = await self.call("GET", "/api/v1/screenshot")
