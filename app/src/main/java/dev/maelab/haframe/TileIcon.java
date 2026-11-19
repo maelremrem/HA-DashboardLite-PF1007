@@ -4,6 +4,9 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import androidx.core.graphics.PathParser;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** Small vector icon library; no font or network assets required on Android 6. */
 final class TileIcon {
@@ -13,10 +16,42 @@ final class TileIcon {
         "bell", "door", "plug", "moon", "heart"
     };
 
+    private static final Map<String, Path> MDI_CACHE = new LinkedHashMap<String, Path>(64, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, Path> eldest) {
+            return size() > 64;
+        }
+    };
+
     static boolean supported(String name) {
         if (name == null || name.isEmpty()) return true;
+        if (name.matches("mdi:[a-z0-9]+(?:-[a-z0-9]+)*")) return true;
         for (String known : NAMES) if (known.equals(name)) return true;
         return false;
+    }
+
+    static boolean validPath(String path) {
+        return path != null && (path.isEmpty() || (path.length() <= 8192 &&
+            path.matches("[MmLlHhVvCcSsQqTtAaZz0-9eE+,.\\\\s-]+") &&
+            (path.startsWith("M") || path.startsWith("m"))));
+    }
+
+    private static void drawMdi(Canvas canvas, Paint paint, String data,
+                                float x, float y, float size, int color) {
+        if (!validPath(data) || data.isEmpty()) return;
+        Path vector = MDI_CACHE.get(data);
+        if (vector == null) {
+            try { vector = PathParser.createPathFromPathData(data); }
+            catch (RuntimeException ignored) { return; }
+            if (vector == null) return;
+            MDI_CACHE.put(data, vector);
+        }
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.scale(size / 24f, size / 24f);
+        paint.setColor(color);
+        paint.setStyle(Paint.Style.FILL);
+        canvas.drawPath(vector, paint);
+        canvas.restore();
     }
 
     static String effective(String name, String type) {
@@ -39,9 +74,14 @@ final class TileIcon {
         c.drawLine(x1, y1, x2, y2, p);
     }
 
-    static void draw(Canvas canvas, Paint paint, String requested, String type,
-                     float x, float y, float size, int color) {
+    static void draw(Canvas canvas, Paint paint, String requested, String pathData,
+                     String type, float x, float y, float size, int color) {
+        if (pathData != null && !pathData.isEmpty()) {
+            drawMdi(canvas, paint, pathData, x, y, size, color);
+            return;
+        }
         String name = effective(requested, type);
+        if (name.startsWith("mdi:")) return;
         if (name.isEmpty() || !supported(name)) return;
         canvas.save();
         canvas.translate(x, y);
