@@ -1097,6 +1097,11 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (target.dataset.importFile !== undefined) {
+      this._importFile(target.files && target.files[0]);
+      target.value = "";
+      return;
+    }
     if (this._busy) {
       if (target.dataset.control === "frame") target.value = this._frameId;
       return;
@@ -1458,6 +1463,101 @@ class HaFrameVisualEditor extends HTMLElement {
       this._message("Enregistrement impossible : " + (error.message || error), true);
     } finally {this._busy = false;}
   }
+  async _loadLibrary() {
+    const frameId = this._frameId;
+    try {
+      const [profiles, snapshots] = await Promise.all([
+        this._hass.callWS({type:"ha_frame/editor/profiles"}),
+        this._hass.callWS({type:"ha_frame/editor/snapshots",entry_id:frameId})
+      ]);
+      this._profiles = profiles.profiles || [];
+      if (frameId === this._frameId) this._snapshots = snapshots.snapshots || [];
+      if (this._panel === "profiles") this._render();
+    } catch (error) {
+      this._message("Bibliothèque indisponible : " + (error.message||error),true);
+    }
+  }
+  _applyLibraryConfig(candidate) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
+        !["dashboard_title","custom_css","pages"].every(k=>Object.hasOwn(candidate,k)) ||
+        Object.keys(candidate).some(k=>!["dashboard_title","custom_css","pages","slideshow"].includes(k))) {
+      this._message("Fichier de dashboard invalide",true);return;
+    }
+    const current=this._config;
+    this._config=clone(candidate);
+    const problem=this._validate();
+    if (problem) {
+      this._config=current;
+      this._message("Configuration refusée : "+problem,true);
+      return;
+    }
+    this._page=0;this._tile=-1;this._panel="page";
+    this._mark();this._render();
+  }
+  async _importFile(file) {
+    if (!file) return;
+    if (file.size>131072) return this._message("Fichier trop volumineux (128 Ko maximum)",true);
+    try {
+      const config=JSON.parse(await file.text());
+      if (this._dirty && !confirm("Remplacer les modifications locales non enregistrées ?")) return;
+      this._applyLibraryConfig(config);
+    } catch (error) {
+      this._message("Import JSON invalide : "+(error.message||error),true);
+    }
+  }
+  _exportLayout() {
+    const data=JSON.stringify(this._config,null,2);
+    const blob=new Blob([data],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;
+    link.download="ha-frame-layout-"+this._frameId.replace(/[^a-z0-9_-]/gi,"")+".json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+  async _libraryAction(action) {
+    try {
+      if (action === "import-layout") {
+        this.shadowRoot.querySelector("[data-import-file]")?.click();
+        return;
+      }
+      if (action === "export-layout") {this._exportLayout();return;}
+      if (action === "profile-save") {
+        const name=this.shadowRoot.querySelector("[data-control='profile-name']")?.value.trim();
+        if (!name) return this._message("Donne un nom au profil",true);
+        const error=this._validate();
+        if (error) return this._message(error,true);
+        const config=await this._prepareMdiConfig();
+        await this._hass.callWS({type:"ha_frame/editor/profile_save",name,config});
+        this._message("Profil enregistré",false);
+      } else if (action === "profile-apply" || action === "profile-delete") {
+        const profileId=this.shadowRoot.querySelector("[data-control='profile-picker']")?.value;
+        if (!profileId) return this._message("Aucun profil sélectionné",true);
+        if (action === "profile-delete") {
+          if (!confirm("Supprimer ce profil enregistré ?")) return;
+          await this._hass.callWS({type:"ha_frame/editor/profile_delete",profile_id:profileId});
+        } else {
+          if (this._dirty && !confirm("Remplacer les modifications locales ?")) return;
+          const result=await this._hass.callWS({type:"ha_frame/editor/profile_get",profile_id:profileId});
+          this._applyLibraryConfig(result.config);
+          return;
+        }
+      } else if (action === "snapshot-apply") {
+        const revision=this.shadowRoot.querySelector("[data-control='snapshot-picker']")?.value;
+        if (!revision) return this._message("Aucun historique sélectionné",true);
+        if (this._dirty && !confirm("Remplacer les modifications locales ?")) return;
+        const result=await this._hass.callWS({type:"ha_frame/editor/snapshot_get",
+          entry_id:this._frameId,revision});
+        this._applyLibraryConfig(result.config);
+        return;
+      }
+      await this._loadLibrary();
+    } catch(error) {
+      this._message("Bibliothèque : "+(error.message||error),true);
+    }
+  }
   async _action(action) {
     if (this._busy) return;
     if (!this._config) {
@@ -1465,6 +1565,12 @@ class HaFrameVisualEditor extends HTMLElement {
       return;
     }
     const page = this._pageObject(), tile = this._tileObject();
+    if (action === "profiles") {
+      this._panel="profiles";this._tile=-1;
+      await this._loadLibrary();this._render();return;
+    }
+    if (["profile-save","profile-apply","profile-delete","snapshot-apply",
+      "export-layout","import-layout"].includes(action)) return this._libraryAction(action);
     if (action === "save") return this._save();
     if (action === "undo") return this._stepHistory(-1);
     if (action === "redo") return this._stepHistory(1);
@@ -1537,7 +1643,11 @@ class HaFrameVisualEditor extends HTMLElement {
       if (!source || !source.value || !confirm("Copier la configuration de ce cadre dans l’éditeur ? Rien n’est enregistré avant de cliquer sur Enregistrer.")) return;
       try {
         const result=await this._hass.callWS({type:"ha_frame/editor/get",entry_id:source.value});
-        this._config=clone(result.config);this._page=0;this._tile=-1;this._panel="page";
+        const mode=this.shadowRoot.querySelector("[data-control='clone-mode']")?.value||"all";
+        if (mode==="theme") this._config.custom_css=result.config.custom_css;
+        else if (mode==="pages") this._config.pages=clone(result.config.pages);
+        else this._config=clone(result.config);
+        this._page=0;this._tile=-1;this._panel="page";
       } catch (error) {this._message("Copie impossible : "+(error.message||error),true);return;}
     } else return;
     this._mark();this._render();
