@@ -278,6 +278,25 @@ async def editor_diagnostics(hass, connection, msg):
 
 @websocket_api.require_admin
 @websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/logs",
+    vol.Required("entry_id"): str,
+})
+@websocket_api.async_response
+async def editor_logs(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    try:
+        events = await coordinator.api.logs()
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Could not load device log")
+        return
+    connection.send_result(msg["id"], {"events": events})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
     vol.Required("type"): "ha_frame/editor/screenshot",
     vol.Required("entry_id"): str,
 })
@@ -327,5 +346,6 @@ def async_register_editor_commands(hass):
     websocket_api.async_register_command(hass, editor_snapshots)
     websocket_api.async_register_command(hass, editor_snapshot_get)
     websocket_api.async_register_command(hass, editor_diagnostics)
+    websocket_api.async_register_command(hass, editor_logs)
     websocket_api.async_register_command(hass, editor_screenshot)
     websocket_api.async_register_command(hass, editor_reload)
