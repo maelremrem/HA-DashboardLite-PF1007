@@ -40,10 +40,13 @@ final class PhotoSlideshow {
         loader.execute(new Runnable() {
             @Override public void run() {
                 try {
-                    File[] files = folder.listFiles(file ->
-                        file.isFile() && file.length() <= 6 * 1024 * 1024 &&
-                        file.getName().toLowerCase(java.util.Locale.US)
-                            .matches(".*\\.(?:jpe?g|png)"));
+                    File[] files = folder.listFiles(new java.io.FileFilter() {
+                        @Override public boolean accept(File file) {
+                            return file.isFile() && file.length() <= 6 * 1024 * 1024 &&
+                                file.getName().toLowerCase(java.util.Locale.US)
+                                    .matches(".*\\.(?:jpe?g|png)");
+                        }
+                    });
                     if (files == null || files.length == 0) {
                         current = null;
                         return;
