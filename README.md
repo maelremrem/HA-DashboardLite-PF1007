@@ -1,4 +1,4 @@
-# HA Frame — PF1007 native dashboard (v0.3)
+# HA Frame — PF1007 native dashboard (v0.5)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
 
@@ -9,6 +9,20 @@ A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the P
 - [ADB access and Wi-Fi setup](docs/adb-access.md)
 - [Vendor app debloat, backup and security audit](docs/debloat-security.md)
 - [Fedora 44 Android development setup](docs/fedora-build.md)
+- [Customize dashboard with native CSS](docs/css-theming.md)
+
+## Changes in v0.5.0 — native CSS styles
+
+- **Native CSS subset, no WebView:** change dashboard colors, text size/weight and card corner radius without sacrificing Canvas performance. Unsupported CSS is rejected instead of ignored.
+- **Four themes:** Original, Ocean, Amber and Light, available from the temporary local web editor.
+- **Custom CSS editor:** edit, import and export `.css` files from the browser; apply styles to individual sensor or command cards.
+- **Configurable dashboard title** and persistent theme settings.
+- **Keeps existing data:** same Android package ID `dev.maelab.haframe`, saved Home Assistant entity assignments, URL and encrypted token remain unchanged when upgrading with `adb install -r`.
+- **Tests:** `bash tests/test-css.sh` exercises the pure-Java CSS parser, predefined themes and existing web reorder behavior.
+
+See the [CSS theme guide](docs/css-theming.md) for supported selectors/properties. This is not full browser CSS; HTML layout, remote images, external stylesheets and animations are intentionally unsupported.
+
+**Validation:** pure Java and browser tests pass locally; Android APK compilation and physical PF1007 testing are still required.
 
 ## Changes in v0.4.0 — touch and reliability
 
