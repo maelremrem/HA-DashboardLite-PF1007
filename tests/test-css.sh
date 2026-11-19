@@ -4,6 +4,8 @@ cd "$(dirname "$0")/.."
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 javac -d "$TMP_DIR" app/src/main/java/dev/maelab/haframe/CanvasTheme.java tests/CanvasThemeTest.java tests/ThemePresetsRunner.java
+javac -d "$TMP_DIR" app/src/main/java/dev/maelab/haframe/TileGrid.java tests/TileGridTest.java
+java -cp "$TMP_DIR" dev.maelab.haframe.TileGridTest
 java -cp "$TMP_DIR" dev.maelab.haframe.CanvasThemeTest
 node tests/theme-presets.test.cjs "$TMP_DIR/presets.json"
 java -cp "$TMP_DIR" dev.maelab.haframe.ThemePresetsRunner "$TMP_DIR/presets.json"
