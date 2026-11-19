@@ -31,6 +31,10 @@ final class FrameConfig {
         String icon = "";
         String iconPath = "";
         int radius = -1;
+        int historyHours = 24;
+        JSONObject rule = null;
+        String tapAction = "default";
+        String longPress = "none";
 
         Card(String type, String label, String entityId) {
             this.type = type;
@@ -51,6 +55,10 @@ final class FrameConfig {
             if (style.length() > 0) item.put("style", style);
             if (!icon.isEmpty()) item.put("icon", icon);
             if (!iconPath.isEmpty()) item.put("icon_path", iconPath);
+            if (historyHours != 24) item.put("history_hours", historyHours);
+            if (rule != null) item.put("rule", rule);
+            if (!"default".equals(tapAction)) item.put("tap_action", tapAction);
+            if (!"none".equals(longPress)) item.put("long_press", longPress);
             return item;
         }
     }
@@ -59,6 +67,7 @@ final class FrameConfig {
         String title;
         int columns;
         final ArrayList<Card> cards = new ArrayList<>();
+        JSONObject activateWhen = null;
 
         Page(String title, int columns) {
             this.title = title;
@@ -84,7 +93,9 @@ final class FrameConfig {
         JSONObject toJson() throws Exception {
             JSONArray items = new JSONArray();
             for (Card card : cards) items.put(card.toJson());
-            return new JSONObject().put("title", title).put("columns", columns).put("cards", items);
+            JSONObject item = new JSONObject().put("title", title).put("columns", columns).put("cards", items);
+            if (activateWhen != null) item.put("activate_when", activateWhen);
+            return item;
         }
     }
 
@@ -141,6 +152,10 @@ final class FrameConfig {
                 throw new IllegalArgumentException("Page invalide : titre ou colonnes");
             }
             Page page = new Page(name, columns);
+            page.activateWhen = source.optJSONObject("activate_when");
+            if (source.has("activate_when") && page.activateWhen == null)
+                throw new IllegalArgumentException("Invalid page automation");
+            DashboardRules.validate(page.activateWhen, false);
             JSONArray cards = source.getJSONArray("cards");
             if (cards.length() > Math.min(MAX_CARDS_PER_PAGE, columns * 3)) {
                 throw new IllegalArgumentException("Maximum 3 rangées par page (colonnes × 3 cartes)");
@@ -152,7 +167,10 @@ final class FrameConfig {
                 String entity = item.getString("entity_id").trim();
                 if ((!"metric".equals(type) && !"control".equals(type) && !"gauge".equals(type) &&
                      !"thermostat".equals(type) && !"light".equals(type) && !"cover".equals(type) &&
-                     !"weather".equals(type) && !"graph".equals(type) && !"camera".equals(type)) ||
+                     !"weather".equals(type) && !"graph".equals(type) && !"camera".equals(type) &&
+                     !"calendar".equals(type) && !"todo".equals(type) && !"bambu".equals(type) &&
+                     !"energy".equals(type) && !"air_quality".equals(type) && !"presence".equals(type) &&
+                     !"circular_gauge".equals(type) && !"history".equals(type)) ||
                     label.length() > 48 ||
                     (!entity.isEmpty() && !entity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))) {
                     throw new IllegalArgumentException("Carte invalide : " + (k + 1));
@@ -160,6 +178,17 @@ final class FrameConfig {
                 Card card = new Card(type, label, entity);
                 card.min = (float) item.optDouble("min", 0);
                 card.max = (float) item.optDouble("max", 100);
+                card.historyHours = item.optInt("history_hours", 24);
+                if (card.historyHours != 1 && card.historyHours != 24 && card.historyHours != 168)
+                    throw new IllegalArgumentException("Invalid history period");
+                card.tapAction = item.optString("tap_action", "default");
+                card.longPress = item.optString("long_press", "none");
+                if (!DashboardRules.validTap(card.tapAction) || !DashboardRules.validLongPress(card.longPress))
+                    throw new IllegalArgumentException("Invalid tile action");
+                card.rule = item.optJSONObject("rule");
+                if (item.has("rule") && card.rule == null)
+                    throw new IllegalArgumentException("Invalid tile rule");
+                DashboardRules.validate(card.rule, true);
                 if ((Float.isNaN(card.min) || Float.isInfinite(card.min)) ||
                     (Float.isNaN(card.max) || Float.isInfinite(card.max)) || card.max <= card.min ||
                     card.max - card.min > 1000000f) throw new IllegalArgumentException("Invalid gauge range");
@@ -232,9 +261,14 @@ final class FrameConfig {
 
     String[] subscribedEntityIds() {
         Set<String> unique = new LinkedHashSet<>();
-        for (Page page : pages) for (Card card : page.cards) {
-            if (!card.entityId.isEmpty()) unique.add(card.entityId);
+        for (Page page : pages) {
+            if (page.activateWhen != null) unique.add(page.activateWhen.optString("entity_id"));
+            for (Card card : page.cards) {
+                if (!card.entityId.isEmpty()) unique.add(card.entityId);
+                if (card.rule != null) unique.add(card.rule.optString("entity_id"));
+            }
         }
+        unique.remove("");
         return unique.toArray(new String[0]);
     }
 
