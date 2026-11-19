@@ -5,6 +5,12 @@ let slots = [];
 let entities = [];
 let focusedSlot = -1;
 let tokenConfigured = false;
+const CSS_PRESETS = {
+  "original": "",
+  "ocean": ":root { --accent: #58d5e7; }\nbody { background-color: #071c2b; }\n.header, .clock { color: #b9f0ff; }\n.metric, .control, .settings { background-color: #113249; border-radius: 23px; }\n.control.on { background-color: #19575e; }\n.control.pressed { background-color: #296b77; }\n.accent { color: var(--accent); }",
+  "amber": ":root { --accent: #ffb25c; }\nbody { background-color: #1a1412; }\n.header, .clock { color: #ffe4b7; }\n.metric, .control, .settings { background-color: #2d231d; border-radius: 14px; }\n.control.on { background-color: #53391e; }\n.control.pressed { background-color: #704d2b; }\n.accent { color: var(--accent); }",
+  "light": ":root { --accent: #167b72; }\nbody { background-color: #ebf2f5; }\n.header, .clock, .control-label, .metric-value { color: #1c3445; }\n.subtitle, .date, .section, .metric-label, .control-state, .status { color: #506677; }\n.metric, .control, .settings { background-color: #ffffff; border-radius: 22px; }\n.settings { color: #20394c; }\n.control.on { background-color: #bcf1df; }\n.control.pressed { background-color: #9fe3d3; }\n.accent { color: var(--accent); }"
+};
 const actionDomains = new Set(['light', 'switch', 'fan', 'input_boolean', 'cover', 'scene', 'script', 'button', 'input_button']);
 
 async function request(path, options) {
@@ -54,6 +60,8 @@ async function boot() {
 async function loadConfiguration() {
   const data = await request('/api/config');
   $('url').value = data.url || '';
+  $('dashboardTitle').value = data.dashboard_title || 'HA FRAME';
+  $('customCss').value = data.custom_css || '';
   tokenConfigured = !!data.token_set;
   $('tokenStatus').textContent = tokenConfigured
     ? 'Token enregistré sur le cadre : il reste inchangé si ce champ est vide.'
@@ -202,6 +210,8 @@ async function saveConfiguration() {
     const payload = {
       url: $('url').value.trim(),
       token: $('token').value.trim(),
+      dashboard_title: $('dashboardTitle').value.trim() || 'HA FRAME',
+      custom_css: $('customCss').value,
       slots: slots.map((s) => ({ label: s.label.trim(), entity_id: s.entity_id.trim() }))
     };
     if (!payload.url) throw new Error('Adresse Home Assistant manquante');
@@ -211,8 +221,10 @@ async function saveConfiguration() {
     tokenConfigured = true;
     $('tokenStatus').textContent = 'Token conservé et non renvoyé dans le navigateur.';
     $('message').textContent = 'Configuration enregistrée et appliquée sur le cadre.';
+    $('cssMessage').textContent = 'CSS accepté par le moteur natif.';
   } catch (e) {
     $('message').textContent = `Erreur : ${e.message}`;
+    $('cssMessage').textContent = `Validation : ${e.message}`;
   } finally { $('save').disabled = false; }
 }
 
@@ -229,6 +241,37 @@ $('loginForm').addEventListener('submit', async (event) => {
   } catch (e) { showError('loginError', e.message); }
 });
 $('search').addEventListener('input', renderResults);
+$('customCss').addEventListener('input', () => {
+  $('cssMessage').textContent = 'Modifications non enregistrées.';
+});
+$('usePreset').addEventListener('click', () => {
+  const preset = CSS_PRESETS[$('themePreset').value];
+  if (preset === undefined) return;
+  if ($('customCss').value.trim() && !confirm('Remplacer le CSS actuel par ce thème ?')) return;
+  $('customCss').value = preset;
+  $('cssMessage').textContent = 'Thème chargé. Clique sur Enregistrer pour appliquer.';
+});
+$('exportCss').addEventListener('click', () => {
+  const blob = new Blob([$('customCss').value], { type: 'text/css;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'ha-frame-theme.css';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+$('importCss').addEventListener('click', () => $('cssFile').click());
+$('cssFile').addEventListener('change', async () => {
+  const file = $('cssFile').files[0];
+  if (!file) return;
+  if (file.size > 12000) { $('cssMessage').textContent = 'Fichier CSS trop long (12 Ko max).'; return; }
+  if ($('customCss').value.trim() && !confirm('Remplacer le CSS actuel par ce fichier ?')) return;
+  try {
+    $('customCss').value = await file.text();
+    $('cssMessage').textContent = 'CSS importé. Enregistre pour appliquer.';
+  } catch (e) { $('cssMessage').textContent = `Import impossible : ${e.message}`; }
+  finally { $('cssFile').value = ''; }
+});
 $('closePicker').addEventListener('click', () => $('picker').close());
 $('clearEntity').addEventListener('click', () => {
   if (focusedSlot >= 0) slots[focusedSlot].entity_id = '';
