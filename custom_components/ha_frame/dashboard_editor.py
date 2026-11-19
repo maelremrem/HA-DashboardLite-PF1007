@@ -141,6 +141,47 @@ def validate_style(style: dict) -> None:
 
 
 
+
+RULE_OPERATORS = {"equals", "not_equals", "above", "below", "on", "off"}
+TAP_ACTIONS = {"default", "none", "page_next", "page_prev", "settings", "camera_fullscreen"}
+LONG_PRESS_ACTIONS = {"none", "toggle", "page_next", "settings"}
+HISTORY_WINDOWS = {1, 24, 168}
+
+
+def validate_condition(rule: dict, *, visual: bool) -> None:
+    """Allow-list only state comparisons and Canvas-safe visual effects."""
+    if not isinstance(rule, dict):
+        raise ValueError("Invalid dashboard condition")
+    allowed = {"entity_id", "operator", "value"}
+    if visual:
+        allowed |= {"hide", "background"}
+    if set(rule) - allowed:
+        raise ValueError("Unknown rule option")
+    entity_id = rule.get("entity_id", "")
+    operator = rule.get("operator")
+    value = rule.get("value", "")
+    if not isinstance(entity_id, str) or not ENTITY_ID.fullmatch(entity_id):
+        raise ValueError("Rule requires a Home Assistant entity")
+    if operator not in RULE_OPERATORS:
+        raise ValueError("Unsupported rule comparison")
+    if not isinstance(value, str) or len(value) > 64 or (
+        operator in {"above", "below"} and (
+            not re.fullmatch(r"-?\d{1,6}(?:\.\d{1,3})?", value)
+            or not isfinite(float(value))
+        )
+    ):
+        raise ValueError("Invalid rule value")
+    if operator in {"equals", "not_equals"} and not value:
+        raise ValueError("Rule comparison value required")
+    if "hide" in rule and type(rule["hide"]) is not bool:
+        raise ValueError("Invalid visibility rule")
+    if "background" in rule and (
+        not isinstance(rule["background"], str)
+        or not HEX_COLOR.fullmatch(rule["background"])
+    ):
+        raise ValueError("Invalid conditional background")
+
+
 def validate_pages(pages: list[dict]) -> None:
     """Match the limits enforced by FrameConfig.setPages on Android."""
     if not isinstance(pages, list) or not 1 <= len(pages) <= MAX_PAGES:
@@ -155,10 +196,20 @@ def validate_pages(pages: list[dict]) -> None:
             raise ValueError("Invalid column count")
         if not isinstance(cards, list) or len(cards) > min(MAX_CARDS, columns * 3):
             raise ValueError("At most three rows of cards per page")
+        if "activate_when" in page:
+            validate_condition(page["activate_when"], visual=False)
         for card in cards:
             if "style" in card:
                 validate_style(card["style"])
             validate_icon(card)
+            if "rule" in card:
+                validate_condition(card["rule"], visual=True)
+            if card.get("tap_action", "default") not in TAP_ACTIONS:
+                raise ValueError("Unsupported tile tap action")
+            if card.get("long_press", "none") not in LONG_PRESS_ACTIONS:
+                raise ValueError("Unsupported tile long press")
+            if type(card.get("history_hours", 24)) is not int or card.get("history_hours", 24) not in HISTORY_WINDOWS:
+                raise ValueError("History window must be 1, 24 or 168 hours")
             if card.get("type") == "camera" and card.get("entity_id") and not card["entity_id"].startswith("camera."):
                 raise ValueError("Camera widget requires a camera entity")
             if card.get("type") == "weather" and card.get("entity_id") and not card["entity_id"].startswith("weather."):
