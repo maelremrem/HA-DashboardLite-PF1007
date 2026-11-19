@@ -10,7 +10,10 @@ import re
 
 MAX_PAGES = 4
 MAX_CARDS = 12
-CARD_TYPES = ("metric", "control", "gauge", "thermostat", "light", "cover", "weather", "graph")
+CARD_TYPES = ("metric", "control", "gauge", "thermostat", "light", "cover", "weather", "graph", "camera")
+CARD_ICONS = {"", "none", "home", "light", "thermometer", "energy", "water", "sun",
+              "cloud", "lock", "camera", "chart", "fan", "battery", "wifi", "person",
+              "settings", "bell", "door", "plug", "moon", "heart"}
 ENTITY_ID = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 # Keep these presets aligned with app/src/main/assets/config/app.js.
@@ -136,6 +139,12 @@ def validate_pages(pages: list[dict]) -> None:
         for card in cards:
             if "style" in card:
                 validate_style(card["style"])
+            if card.get("icon", "") not in CARD_ICONS:
+                raise ValueError("Invalid tile icon")
+            if card.get("type") == "camera" and card.get("entity_id") and not card["entity_id"].startswith("camera."):
+                raise ValueError("Camera widget requires a camera entity")
+            if card.get("type") == "weather" and card.get("entity_id") and not card["entity_id"].startswith("weather."):
+                raise ValueError("Weather widget requires a weather entity")
             if card.get("type") not in CARD_TYPES:
                 raise ValueError("Invalid card type")
             label = card.get("label")
