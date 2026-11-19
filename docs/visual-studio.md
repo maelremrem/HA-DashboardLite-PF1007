@@ -4,7 +4,7 @@ Home Assistant now embeds a **Lovelace card** for visually editing PF1007 dashbo
 
 ## First-time setup
 
-1. Update the **HA Frame PF1007** integration to **v1.0.0** using Marketplace/HACS, then **restart Home Assistant**.
+1. Update the **HA Frame PF1007** integration to **v1.0.1** using Marketplace/HACS, then **restart Home Assistant**.
 2. Open the Home Assistant dashboard you want to use for administration and choose **Edit dashboard → Add card**.
 3. Search for **HA Frame · Studio**. If it is not available in the card picker, choose **Manual** and paste:
 
@@ -18,7 +18,7 @@ Home Assistant now embeds a **Lovelace card** for visually editing PF1007 dashbo
 
 ### If Home Assistant does not recognize the card
 
-For Lovelace dashboards in **storage mode**, the integration automatically registers a module resource:
+For Lovelace dashboards in **storage mode**, the integration automatically registers a module resource (fixed in v1.0.1; previous versions could silently skip registration):
 
 ```text
 /ha-frame/ha-frame-editor.js?v=1.0.0
@@ -64,13 +64,13 @@ The card will initially select that frame, while still allowing you to switch us
 
 ## Version compatibility
 
-Only the **Home Assistant integration v1.0.0** needs updating. The existing **Android APK v0.9.0** already has the `GET /api/v1/config` and `POST /api/v1/config` endpoints used by Studio. Re-pairing is not necessary.
+Only the **Home Assistant integration v1.0.1** needs updating. The existing **Android APK v0.9.0** already has the `GET /api/v1/config` and `POST /api/v1/config` endpoints used by Studio. Re-pairing is not necessary.
 
 The older **Configure** options wizard still works as a fallback. A future dedicated full-screen HA panel may improve ergonomics further, but this version is a Lovelace custom card embedded directly in your dashboard.
 
 ## Troubleshooting
 
-- **Card not found:** verify `custom_components/ha_frame/frontend/ha-frame-editor.js` was installed, restart Home Assistant and check the resource URL.
+- **Card not found:** after v1.0.1, restart Home Assistant and hard-refresh the browser. Confirm that the JavaScript module resource is listed; if not, add it manually via Settings → Dashboards → Resources. Also verify `custom_components/ha_frame/frontend/ha-frame-editor.js` was installed, restart Home Assistant and check the resource URL.
 - **Permission denied:** the logged-in HA user needs administrator permissions for the visual editor.
 - **Frame offline:** check Wi-Fi and TCP port 8766. The card reads the frame through Home Assistant, not from the browser.
 - **Conflict on save:** someone changed the layout in the native web editor or another browser session. Refresh this frame and reapply your edits.
