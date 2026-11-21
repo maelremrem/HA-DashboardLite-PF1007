@@ -33,10 +33,21 @@ final class DashboardRules {
         while (keys.hasNext()) {
             String key = keys.next();
             if ("entity_id".equals(key) || "operator".equals(key) || "value".equals(key)) continue;
+            if (visual && "icon".equals(key) && TileIcon.supported(rule.optString("icon", ""))) continue;
+            if (visual && "icon_path".equals(key) &&
+                TileIcon.validPath(rule.optString("icon_path", ""))) continue;
             if (visual && "hide".equals(key) && rule.opt("hide") instanceof Boolean) continue;
             if (visual && "background".equals(key) &&
                 rule.optString("background").matches("#[0-9a-fA-F]{6}")) continue;
             throw new IllegalArgumentException("Unsupported rule key");
+        }
+        if (visual && rule.has("icon")) {
+            String icon = rule.optString("icon","");
+            String path = rule.optString("icon_path","");
+            if (icon.startsWith("mdi:") && path.isEmpty())
+                throw new IllegalArgumentException("Rule MDI icon path required");
+            if (!path.isEmpty() && !icon.startsWith("mdi:"))
+                throw new IllegalArgumentException("Rule icon and path mismatch");
         }
         if (("equals".equals(op) || "not_equals".equals(op)) && value.isEmpty()) {
             throw new IllegalArgumentException("Empty comparison");
