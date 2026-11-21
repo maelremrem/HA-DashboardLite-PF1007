@@ -17,7 +17,7 @@ final class PhotoLibrary {
     static final int MAX_JPEG = 96000;
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private static File folder(Context context) throws Exception {
+    static File folder(Context context) throws Exception {
         File pictures=context.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
         if(pictures==null)throw new IllegalStateException("Pictures directory unavailable");
         File directory=new File(pictures,"HAFrame");
