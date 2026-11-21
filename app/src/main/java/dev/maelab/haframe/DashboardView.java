@@ -535,14 +535,27 @@ final class DashboardView extends View {
                 } else {
                     drawTrend(canvas, history, x+20,y+94,w-40,Math.max(8,h-114),accent);
                 }
-            } else if ("calendar".equals(card.type)) {
-                String event = state.attributes.optString("message", state.state);
-                String starts = state.attributes.optString("start_time", "");
-                text(canvas,event,x+20,y+91,26,foreground,true,w-40);
-                text(canvas,starts.replace('T',' '),x+20,y+h-25,18,secondary,false,w-40);
-            } else if ("todo".equals(card.type)) {
-                text(canvas,state.state + " tâches",x+20,y+94,32,foreground,true,w-40);
-                text(canvas,"Liste Home Assistant",x+20,y+h-25,18,secondary,false,w-40);
+            } else if ("calendar".equals(card.type) || "todo".equals(card.type)) {
+                org.json.JSONArray events = client == null ? new org.json.JSONArray() :
+                    client.richItems(card.entityId);
+                int maxRows = Math.max(1, Math.min(4, (int)((h - 68) / 35f)));
+                if (events.length() == 0) {
+                    String fallback = "todo".equals(card.type) ?
+                        state.state + " tâches" :
+                        state.attributes.optString("message", "Aucun événement");
+                    text(canvas,fallback,x+20,y+Math.min(92,h-28),23,foreground,true,w-40);
+                } else {
+                    for(int j=0;j<events.length() && j<maxRows;j++) {
+                        org.json.JSONObject item=events.optJSONObject(j);
+                        if(item==null)continue;
+                        String title=item.optString("title","");
+                        String when=item.optString("when","");
+                        text(canvas,(j+1)+". "+title,x+20,y+77+j*35,21,foreground,j==0,w-40);
+                        if (w>340 && !when.isEmpty())
+                            text(canvas,when.replace('T',' '),x+w-145,y+77+j*35,
+                                14,secondary,false,125);
+                    }
+                }
             } else if ("bambu".equals(card.type)) {
                 text(canvas,state.state,x+20,y+90,26,foreground,true,w-40);
                 int progress = state.attributes.optInt("progress",-1);
