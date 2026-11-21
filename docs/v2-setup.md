@@ -1,6 +1,6 @@
-# HA Frame Studio v2.1 feature bundle — setup and test plan
+> Latest complete-workflow guide: [2.2.0 final test](v2.2-complete.md). This page describes the earlier feature-bundle baseline.\n\n# HA Frame Studio v2.1 feature bundle — setup and test plan
 
-This branch targets **HA integration 2.1.0** and **Android APK 2.1.0** on a rooted PF1007 with Android **6.0.1 / API 23**. Upgrade both components; earlier APKs cannot render the new widget and slideshow schema. Do not uninstall the existing APK; install in place with the same signing certificate.
+This branch targets **HA integration 2.2.0** and **Android APK 2.2.0** on a rooted PF1007 with Android **6.0.1 / API 23**. Upgrade both components; earlier APKs cannot render the new widget and slideshow schema. Do not uninstall the existing APK; install in place with the same signing certificate.
 
 ## Included functionality
 
@@ -56,7 +56,7 @@ adb shell am force-stop dev.maelab.haframe
 adb shell am start -n dev.maelab.haframe/.MainActivity
 ```
 
-For HA, update custom_components/ha_frame to 2.1.0 through HACS or manual copy, restart HA, then hard-refresh the browser and open **HA Frame Studio**.
+For HA, update custom_components/ha_frame to 2.2.0 through HACS or manual copy, restart HA, then hard-refresh the browser and open **HA Frame Studio**.
 
 **The debug APK is build-signed**. In-place updates only work when the new APK is signed by the same certificate as the installed APK. If `adb install -r` fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, do not uninstall until existing settings and pairing data are backed up.
 
