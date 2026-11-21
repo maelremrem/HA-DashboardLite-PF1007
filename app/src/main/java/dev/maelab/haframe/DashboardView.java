@@ -55,7 +55,19 @@ final class DashboardView extends View {
     private String notificationTitle = "";
     private String notificationMessage = "";
     private long notificationUntil;
-    private final Runnable endNotification = () -> { notificationUntil = 0; invalidate(); };
+    private int notificationPriority;
+    private final java.util.ArrayList<Alert> alerts = new java.util.ArrayList<>();
+    private static final class Alert {
+        String title, message;
+        int priority;
+        long expires;
+        Alert(String title,String message,int priority,long expires) {
+            this.title=title;this.message=message;this.priority=priority;this.expires=expires;
+        }
+    }
+    private final Runnable endNotification = new Runnable() {
+        @Override public void run() {notificationUntil=0;showNextAlert();}
+    };
     private float scale = 1f;
     private float dx;
     private float dy;
@@ -167,14 +179,43 @@ final class DashboardView extends View {
     }
 
     void showNotification(String title, String message, int seconds) {
-        photoActive = false;
-        lastInteraction = SystemClock.elapsedRealtime();
+        showNotification(title,message,seconds,1);
+    }
+    void showNotification(String title,String message,int seconds,int priority) {
+        photoActive=false;
+        lastInteraction=SystemClock.elapsedRealtime();
         refreshCamera();
-        notificationTitle = title;
-        notificationMessage = message;
-        notificationUntil = SystemClock.elapsedRealtime() + seconds * 1000L;
+        long now=SystemClock.elapsedRealtime();
+        for(Alert item:alerts) {
+            if(item.title.equals(title)&&item.message.equals(message))return;
+        }
+        if(notificationUntil>now&&notificationTitle.equals(title)&&notificationMessage.equals(message))
+            return;
+        if(alerts.size()>=10)alerts.remove(0);
+        if(notificationUntil>now && priority>notificationPriority) {
+            alerts.add(new Alert(notificationTitle,notificationMessage,
+                notificationPriority,notificationUntil));
+            notificationUntil=0;
+        }
+        alerts.add(new Alert(title,message,priority,now+seconds*1000L));
+        if(notificationUntil<=now)showNextAlert();
+    }
+    private void showNextAlert() {
         removeCallbacks(endNotification);
-        postDelayed(endNotification, seconds * 1000L);
+        long now=SystemClock.elapsedRealtime();
+        Alert selected=null;
+        for(int i=alerts.size()-1;i>=0;i--) {
+            Alert item=alerts.get(i);
+            if(item.expires<=now) {alerts.remove(i);continue;}
+            if(selected==null||item.priority>selected.priority) selected=item;
+        }
+        if(selected==null) {notificationUntil=0;invalidate();return;}
+        alerts.remove(selected);
+        notificationTitle=selected.title;
+        notificationMessage=selected.message;
+        notificationPriority=selected.priority;
+        notificationUntil=selected.expires;
+        postDelayed(endNotification,Math.max(1L,notificationUntil-now));
         invalidate();
     }
     void setStatus(String status, boolean connected) {
@@ -776,7 +817,7 @@ final class DashboardView extends View {
                     x >= 170 && x <= 1110 && y >= 235 && y <= 565) {
                     notificationUntil = 0;
                     touchedCard = -1;
-                    removeCallbacks(endNotification);
+                    showNextAlert();
                     invalidate();
                     return true;
                 }
