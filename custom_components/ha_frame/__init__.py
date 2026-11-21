@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import FrameApi, FrameApiError
 from .const import DOMAIN, PLATFORMS
+from . import media_album
 from .editor_ws import async_register_editor_commands
 from .frontend_resource import async_register_editor_frontend, async_register_studio_panel
 
@@ -110,6 +111,29 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             vol.Optional("title"): vol.All(str, vol.Length(max=80)),
             vol.Optional("duration", default=12): vol.All(vol.Coerce(int),vol.Range(min=3,max=60)),
             vol.Optional("priority", default=1): vol.All(vol.Coerce(int),vol.Range(min=0,max=3)),
+        }))
+    async def sync_media_album(call: ServiceCall) -> None:
+        # Ordinary users cannot request transfers from the server's media folders.
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None or not user.is_admin:
+                raise HomeAssistantError("Administrator required for album sync")
+        coordinator = next((c for c in hass.data[DOMAIN].values()
+            if c.entry.data.get("device_id") == call.data["device_id"]), None)
+        if coordinator is None:
+            raise HomeAssistantError("HA Frame device not found")
+        try:
+            await media_album.sync(
+                hass, coordinator, call.data["source"], call.data.get("folder", "")
+            )
+        except (FrameApiError, OSError, ValueError) as error:
+            raise HomeAssistantError("Album sync failed") from error
+
+    hass.services.async_register(DOMAIN, "sync_media_album", sync_media_album,
+        schema=vol.Schema({
+            vol.Required("device_id"): str,
+            vol.Required("source"): str,
+            vol.Optional("folder", default=""): vol.All(str,vol.Length(max=160)),
         }))
     return True
 
