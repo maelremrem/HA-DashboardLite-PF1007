@@ -28,7 +28,8 @@ def layout_revision(config: dict) -> str:
 def validate_slideshow(value: dict) -> dict:
     """Bound sources and intervals, never accept arbitrary media URLs."""
     if not isinstance(value, dict) or set(value) - {
-        "enabled", "idle_seconds", "interval_seconds", "show_clock", "source", "camera_entity"
+        "enabled", "idle_seconds", "interval_seconds", "show_clock", "source", "camera_entity",
+        "transition_ms", "quiet_start", "quiet_end"
     }:
         raise ValueError("Invalid slideshow settings")
     if type(value.get("enabled")) is not bool or type(value.get("show_clock")) is not bool:
@@ -44,6 +45,14 @@ def validate_slideshow(value: dict) -> dict:
         entity and not re.fullmatch(r"(?:camera|image)\.[a-z0-9_]+", entity)
     ) or (value["source"] != "local" and not entity):
         raise ValueError("Invalid slideshow camera")
+    transition = value.get("transition_ms", 800)
+    start = value.get("quiet_start", "")
+    end = value.get("quiet_end", "")
+    valid_clock = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+    if type(transition) is not int or not 0 <= transition <= 2500 or (
+        bool(start) != bool(end)
+    ) or any(not isinstance(v, str) or (v and not valid_clock.fullmatch(v)) for v in (start,end)):
+        raise ValueError("Invalid photo transition or quiet hours")
     return deepcopy(value)
 
 
