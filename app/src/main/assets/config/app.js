@@ -491,6 +491,8 @@ async function saveConfiguration() {
           ...(card.rule ? {rule:card.rule} : {}),
           ...(card.history_hours ? {history_hours:card.history_hours} : {}),
           ...(card.tap_action ? {tap_action:card.tap_action} : {}),
+          ...(card.progress_entity ? {progress_entity:card.progress_entity} : {}),
+          ...(card.remaining_entity ? {remaining_entity:card.remaining_entity} : {}),
           ...(card.long_press ? {long_press:card.long_press} : {})
         }))
       })),
