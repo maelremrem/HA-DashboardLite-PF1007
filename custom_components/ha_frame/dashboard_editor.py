@@ -214,6 +214,12 @@ def validate_pages(pages: list[dict]) -> None:
                 raise ValueError("Unsupported tile long press")
             if type(card.get("history_hours", 24)) is not int or card.get("history_hours", 24) not in HISTORY_WINDOWS:
                 raise ValueError("History window must be 1, 24 or 168 hours")
+            for field in ("progress_entity", "remaining_entity"):
+                value = card.get(field, "")
+                if not isinstance(value, str) or (value and (
+                    card.get("type") != "bambu" or not ENTITY_ID.fullmatch(value)
+                )):
+                    raise ValueError("Invalid Bambu linked sensor")
             if card.get("type") == "camera" and card.get("entity_id") and not card["entity_id"].startswith("camera."):
                 raise ValueError("Camera widget requires a camera entity")
             if card.get("type") == "weather" and card.get("entity_id") and not card["entity_id"].startswith("weather."):
