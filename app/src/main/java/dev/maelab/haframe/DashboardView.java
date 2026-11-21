@@ -633,8 +633,24 @@ final class DashboardView extends View {
             } else if ("bambu".equals(card.type)) {
                 text(canvas,state.state,x+20,y+90,26,foreground,true,w-40);
                 int progress = state.attributes.optInt("progress",-1);
-                if (progress >= 0) bar(canvas,x+20,y+h-34,w-40,progress,accent);
-                else text(canvas,state.attributes.optString("remaining_time",""),
+                if (client != null && !card.progressEntity.isEmpty()) {
+                    HaClient.EntityState percentage=client.get(card.progressEntity);
+                    if (percentage != null) {
+                        float number=parseNumber(percentage.state,Float.NaN);
+                        if (finite(number)) progress=Math.round(number);
+                    }
+                }
+                String remaining=state.attributes.optString("remaining_time","");
+                if (client!=null && !card.remainingEntity.isEmpty()) {
+                    HaClient.EntityState duration=client.get(card.remainingEntity);
+                    if(duration!=null && !"unavailable".equals(duration.state))
+                        remaining=duration.state;
+                }
+                if (progress>=0) {
+                    bar(canvas,x+20,y+h-34,w-40,progress,accent);
+                    text(canvas,progress+"% · "+remaining,x+20,y+h-51,
+                        18,secondary,false,w-40);
+                } else text(canvas,remaining,
                     x+20,y+h-26,18,secondary,false,w-40);
             } else if ("energy".equals(card.type) || "air_quality".equals(card.type)) {
                 text(canvas,state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
