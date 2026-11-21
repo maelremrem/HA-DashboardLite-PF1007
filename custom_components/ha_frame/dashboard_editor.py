@@ -154,7 +154,7 @@ def validate_condition(rule: dict, *, visual: bool) -> None:
         raise ValueError("Invalid dashboard condition")
     allowed = {"entity_id", "operator", "value"}
     if visual:
-        allowed |= {"hide", "background"}
+        allowed |= {"hide", "background", "icon", "icon_path"}
     if set(rule) - allowed:
         raise ValueError("Unknown rule option")
     entity_id = rule.get("entity_id", "")
@@ -175,6 +175,8 @@ def validate_condition(rule: dict, *, visual: bool) -> None:
         raise ValueError("Invalid time window")
     if operator in {"equals", "not_equals"} and not value:
         raise ValueError("Rule comparison value required")
+    if visual and ("icon" in rule or "icon_path" in rule):
+        validate_icon({"icon":rule.get("icon",""), "icon_path":rule.get("icon_path","")})
     if "hide" in rule and type(rule["hide"]) is not bool:
         raise ValueError("Invalid visibility rule")
     if "background" in rule and (
