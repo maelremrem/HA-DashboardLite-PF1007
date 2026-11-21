@@ -24,7 +24,7 @@ const LONG_PRESS_ACTIONS = [
 const RULE_ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
 function checkRule(rule, visual = true) {
   if (!rule || typeof rule !== "object" || Array.isArray(rule)) return "Règle invalide";
-  const keys = ["entity_id","operator","value",...(visual?["hide","background"]:[])];
+  const keys = ["entity_id","operator","value",...(visual?["hide","background","icon","icon_path"]:[])];
   if (Object.keys(rule).some(k=>!keys.includes(k))) return "Option de règle interdite";
   if (rule.operator!=="time_between" && !RULE_ENTITY_RE.test(rule.entity_id||"")) return "Entité de condition invalide";
   if (rule.operator==="time_between" && rule.entity_id &&
@@ -39,6 +39,9 @@ function checkRule(rule, visual = true) {
       !/^(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d$/.test(rule.value)) {
     return "Plage horaire invalide (HH:MM-HH:MM)";
   }
+  if ("icon" in rule && rule.icon && !MDI_REGEX.test(rule.icon)) return "Icône MDI conditionnelle invalide";
+  if ("icon_path" in rule && (typeof rule.icon_path!=="string" || rule.icon_path.length>8192 ||
+      !MDI_PATH_REGEX.test(rule.icon_path))) return "Chemin de l’icône conditionnelle invalide";
   if ("hide" in rule && typeof rule.hide !== "boolean") return "Masquage invalide";
   if ("background" in rule && !/^#[0-9a-fA-F]{6}$/.test(rule.background)) return "Couleur invalide";
   return "";
@@ -840,7 +843,7 @@ class HaFrameVisualEditor extends HTMLElement {
             action + "' data-resize-index='" + i + "' aria-label='" + title +
             "' title='" + title + "'" + (disabled ? " disabled" : "") + ">" + symbol + "</button>").join("") +
         "</div>";
-      const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
+      const icon = tileIconMarkup(conditionTrue && tile.rule?.icon || tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
       const ring = tile.type === "circular_gauge" ? "<svg class='tile-circle' viewBox='0 0 100 100' aria-hidden='true'>" +
         "<circle cx='50' cy='50' r='39' stroke='#70839855' stroke-width='9' fill='none'/>" +
         "<circle cx='50' cy='50' r='39' stroke='" + accent + "' stroke-width='9' fill='none' " +
@@ -1102,6 +1105,9 @@ class HaFrameVisualEditor extends HTMLElement {
         "</select></label>" +
         "<label class='field'>Couleur si vrai<input type='color' data-bind='rule-background' value='" +
           esc(tile.rule?.background||"#ad4c43") + "'></label>" +
+        "<label class='field'>Icône MDI si vrai<input data-bind='rule-icon' list='ha-frame-mdi' " +
+          "maxlength='96' placeholder='mdi:alert' value='" + esc(tile.rule?.icon||"") +
+          "'></label>" +
         "<p class='hint'>La condition est évaluée localement sur le cadre. La place d’une tuile masquée reste réservée dans la grille.</p>" +
         "<div class='actions'><button data-action='clear-tile-rule'>Effacer la condition</button></div>" +
         "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button>" +
@@ -1258,6 +1264,14 @@ class HaFrameVisualEditor extends HTMLElement {
         if (prop === "value") next.value = target.value;
         if (prop === "hide") next.hide = target.value === "true";
         if (prop === "background") next.background = target.value;
+        if (prop === "icon") {
+          if (target.value.trim() && !MDI_REGEX.test(target.value.trim())) {
+            this._message("Choisir une icône mdi: valide",true);return;
+          }
+          if (target.value.trim()) next.icon = target.value.trim();
+          else delete next.icon;
+          delete next.icon_path;
+        }
         if (!next.entity_id && next.operator!=="time_between") delete tile.rule;
         else tile.rule = next;
       }
@@ -1478,6 +1492,15 @@ class HaFrameVisualEditor extends HTMLElement {
     const resolved = new Map();
     for (const page of result.pages) {
       for (const tile of page.cards) {
+        if (tile.rule && tile.rule.icon) {
+          const key="rule|"+tile.rule.icon;
+          let rulePath=resolved.get(key);
+          if (!rulePath) {
+            rulePath=await this._resolveIconPath(tile.rule.icon,null);
+            resolved.set(key,rulePath);
+          }
+          tile.rule.icon_path=rulePath;
+        }
         if (tile.icon === "none") {
           delete tile.icon_path;
           continue;
