@@ -60,6 +60,21 @@ class FrameApi:
     async def wake(self) -> None:
         await self.call("POST", "/api/v1/wake", {})
 
+    async def apk_begin(self, total_bytes: int, sha256: str) -> str:
+        response=await self.call("POST","/api/v1/update/begin",{
+            "bytes":total_bytes,"sha256":sha256,
+        })
+        return response["session"]
+
+    async def apk_chunk(self, session: str, part: int, data: str) -> int:
+        response=await self.call("POST","/api/v1/update/chunk",{
+            "session":session,"part":part,"data":data,
+        })
+        return response["received"]
+
+    async def apk_finish(self, session: str) -> dict:
+        return await self.call("POST","/api/v1/update/finish",{"session":session})
+
     async def photos(self) -> list[dict]:
         result = await self.call("GET", "/api/v1/photos")
         rows = result.get("photos", [])
