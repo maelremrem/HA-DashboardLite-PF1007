@@ -992,6 +992,12 @@ class HaFrameVisualEditor extends HTMLElement {
         "<label class='field'>Source<select data-bind='photo-source'>" +
           option("local","Photos locales sur le cadre",opts.source) +
           option("camera","Caméra Home Assistant",opts.source) + option("image","Image Home Assistant",opts.source) + "</select></label>" +
+        "<label class='field'>Fondu (millisecondes)<input type='number' data-bind='photo-transition' min='0' max='2500' value='" +
+          esc(opts.transition_ms ?? 800) + "'></label>" +
+        "<label class='field'>Silence / veille de HH:MM à HH:MM<input data-bind='photo-quiet-start' " +
+          "placeholder='22:00' value='" + esc(opts.quiet_start||"") + "'></label>" +
+        "<label class='field'>Fin de la plage de silence<input data-bind='photo-quiet-end' " +
+          "placeholder='07:00' value='" + esc(opts.quiet_end||"") + "'></label>" +
         (opts.source!=="local" ? "<label class='field'>Entité caméra ou image<input data-bind='photo-camera' " +
           "list='ha-frame-entities' placeholder='camera.salon' value='" +
           esc(opts.camera_entity||"") + "'></label>" : "") +
@@ -1221,6 +1227,9 @@ class HaFrameVisualEditor extends HTMLElement {
       if (bind === "photo-interval") options.interval_seconds = Number(target.value);
       if (bind === "photo-source") options.source = target.value;
       if (bind === "photo-camera") options.camera_entity = target.value.trim();
+      if (bind === "photo-transition") options.transition_ms = Number(target.value);
+      if (bind === "photo-quiet-start") options.quiet_start = target.value.trim();
+      if (bind === "photo-quiet-end") options.quiet_end = target.value.trim();
       this._mark();
       this._preview();
       return;
@@ -1402,7 +1411,11 @@ class HaFrameVisualEditor extends HTMLElement {
           !Number.isInteger(v.idle_seconds) || v.idle_seconds<30 || v.idle_seconds>3600 ||
           !Number.isInteger(v.interval_seconds) || v.interval_seconds<5 || v.interval_seconds>300 ||
           !["local","camera","image"].includes(v.source) ||
-          (v.source!=="local" && !/^(?:camera|image)\.[a-z0-9_]+$/.test(v.camera_entity||""))) {
+          (v.source!=="local" && !/^(?:camera|image)\.[a-z0-9_]+$/.test(v.camera_entity||"")) ||
+          !Number.isInteger(v.transition_ms??800) || (v.transition_ms??800)<0 ||
+          (v.transition_ms??800)>2500 ||
+          (!!v.quiet_start !== !!v.quiet_end) ||
+          [v.quiet_start||"",v.quiet_end||""].some(t=>t&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t))) {
         return "Paramètres du diaporama invalides";
       }
       const active=this._frames.find(f=>f.entry_id===this._frameId);
