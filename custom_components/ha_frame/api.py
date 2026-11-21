@@ -75,6 +75,24 @@ class FrameApi:
     async def apk_finish(self, session: str) -> dict:
         return await self.call("POST","/api/v1/update/finish",{"session":session})
 
+    async def media_begin(self, size: int, sha256: str) -> str:
+        result = await self.call("POST", "/api/v1/photos/import_begin", {
+            "bytes": size, "sha256": sha256,
+        })
+        return result["session"]
+
+    async def media_chunk(self, session: str, index: int, data: str) -> int:
+        result = await self.call("POST", "/api/v1/photos/import_chunk", {
+            "session": session, "part": index, "data": data,
+        })
+        return result["received"]
+
+    async def media_finish(self, session: str) -> str:
+        result = await self.call("POST", "/api/v1/photos/import_finish", {
+            "session": session,
+        })
+        return result["id"]
+
     async def photos(self) -> list[dict]:
         result = await self.call("GET", "/api/v1/photos")
         rows = result.get("photos", [])
