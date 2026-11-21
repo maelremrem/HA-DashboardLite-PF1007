@@ -247,7 +247,21 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("POST".equals(req.method) && "/api/v1/update/begin".equals(req.path)) {
+                if ("POST".equals(req.method) && "/api/v1/photos/import_begin".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    String id=PhotoImportSession.begin(context,body.optInt("bytes",0),
+                        body.optString("sha256",""));
+                    send(out,200,new JSONObject().put("session",id));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/import_chunk".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    int bytes=PhotoImportSession.chunk(context,body.optString("session",""),
+                        body.optInt("part",-1),body.optString("data",""));
+                    send(out,200,new JSONObject().put("received",bytes));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/import_finish".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    String id=PhotoImportSession.finish(context,body.optString("session",""));
+                    send(out,200,new JSONObject().put("id",id));
+                } else if ("POST".equals(req.method) && "/api/v1/update/begin".equals(req.path)) {
                     JSONObject body=new JSONObject(req.body);
                     String id=ApkStaging.begin(context,body.optInt("bytes",0),
                         body.optString("sha256",""));
