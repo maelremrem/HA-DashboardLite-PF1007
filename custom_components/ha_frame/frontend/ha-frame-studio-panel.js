@@ -1,5 +1,5 @@
 /* HA Frame Studio full-page Home Assistant panel. */
-import "./ha-frame-editor.js?v=2.1.0";
+import "./ha-frame-editor.js?v=2.2.0";
 
 class HaFrameStudioPanel extends HTMLElement {
   constructor() {
