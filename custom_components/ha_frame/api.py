@@ -50,9 +50,11 @@ class FrameApi:
     async def update(self, values: dict) -> None:
         await self.call("POST", "/api/v1/config", values)
 
-    async def notify(self, message: str, title: str = "Home Assistant", duration: int = 12) -> None:
+    async def notify(self, message: str, title: str = "Home Assistant",
+                     duration: int = 12, priority: int = 1) -> None:
         await self.call("POST", "/api/v1/notify", {
-            "message": message, "title": title, "duration": duration
+            "message": message, "title": title, "duration": duration,
+            "priority": priority,
         })
 
     async def wake(self) -> None:
