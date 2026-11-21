@@ -322,6 +322,80 @@ async def editor_photo_delete(hass, connection, msg):
     connection.send_result(msg["id"], {"deleted": removed})
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/apk_begin",
+    vol.Required("entry_id"): str,
+    vol.Required("bytes"): int,
+    vol.Required("sha256"): str,
+})
+@websocket_api.async_response
+async def editor_apk_begin(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    if not (1024 <= msg["bytes"] <= 48 * 1024 * 1024) or not re.fullmatch(r"[0-9a-f]{64}", msg["sha256"]):
+        connection.send_error(msg["id"], "invalid_format", "Invalid APK metadata")
+        return
+    try:
+        session = await coordinator.api.apk_begin(msg["bytes"], msg["sha256"])
+    except (FrameApiError, KeyError):
+        connection.send_error(msg["id"], "unavailable", "Cannot stage update")
+        return
+    connection.send_result(msg["id"], {"session": session})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/apk_chunk",
+    vol.Required("entry_id"): str,
+    vol.Required("session"): str,
+    vol.Required("part"): int,
+    vol.Required("data"): str,
+})
+@websocket_api.async_response
+async def editor_apk_chunk(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    if not re.fullmatch(r"[0-9a-f]{32}", msg["session"]) or (
+        len(msg["data"]) > 80008 or not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", msg["data"])
+    ) or not 0 <= msg["part"] < 1200:
+        connection.send_error(msg["id"], "invalid_format", "Invalid APK chunk")
+        return
+    try:
+        received = await coordinator.api.apk_chunk(msg["session"], msg["part"], msg["data"])
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "APK transfer interrupted")
+        return
+    connection.send_result(msg["id"], {"received": received})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/apk_finish",
+    vol.Required("entry_id"): str,
+    vol.Required("session"): str,
+})
+@websocket_api.async_response
+async def editor_apk_finish(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    if not re.fullmatch(r"[0-9a-f]{32}", msg["session"]):
+        connection.send_error(msg["id"], "invalid_format", "Invalid session")
+        return
+    try:
+        result = await coordinator.api.apk_finish(msg["session"])
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "APK signature or checksum rejected")
+        return
+    connection.send_result(msg["id"], result)
+
+
 DIAGNOSTIC_FIELDS = {
     "version", "android_version", "uptime_seconds", "wifi_connected",
     "wifi_ssid", "wifi_ip", "wifi_rssi_dbm", "wifi_quality_percent",
@@ -426,5 +500,8 @@ def async_register_editor_commands(hass):
     websocket_api.async_register_command(hass, editor_photos)
     websocket_api.async_register_command(hass, editor_photo_upload)
     websocket_api.async_register_command(hass, editor_photo_delete)
+    websocket_api.async_register_command(hass, editor_apk_begin)
+    websocket_api.async_register_command(hass, editor_apk_chunk)
+    websocket_api.async_register_command(hass, editor_apk_finish)
     websocket_api.async_register_command(hass, editor_screenshot)
     websocket_api.async_register_command(hass, editor_reload)
