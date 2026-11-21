@@ -109,19 +109,21 @@ final class FrameConfig {
         try {
             return new JSONObject().put("enabled", false).put("idle_seconds", 300)
                 .put("interval_seconds", 30).put("show_clock", true)
-                .put("source", "local").put("camera_entity", "");
+                .put("source", "local").put("camera_entity", "")
+                .put("transition_ms", 800).put("quiet_start", "").put("quiet_end", "");
         } catch (Exception ignored) { return new JSONObject(); }
     }
 
     void setSlideshow(JSONObject slideshow) throws Exception {
-        if (slideshow == null || slideshow.length() > 6)
+        if (slideshow == null || slideshow.length() > 9)
             throw new IllegalArgumentException("Invalid slideshow");
         java.util.Iterator<String> keys = slideshow.keys();
         while (keys.hasNext()) {
             String key = keys.next();
             if (!("enabled".equals(key) || "idle_seconds".equals(key) ||
                 "interval_seconds".equals(key) || "show_clock".equals(key) ||
-                "source".equals(key) || "camera_entity".equals(key))) {
+                "source".equals(key) || "camera_entity".equals(key) ||
+                "transition_ms".equals(key) || "quiet_start".equals(key) || "quiet_end".equals(key))) {
                 throw new IllegalArgumentException("Unknown slideshow setting");
             }
         }
@@ -141,6 +143,14 @@ final class FrameConfig {
             (!"local".equals(source) && entity.isEmpty())) {
             throw new IllegalArgumentException("Invalid slideshow source or timing");
         }
+        int transition=slideshow.optInt("transition_ms",800);
+        String quietStart=slideshow.optString("quiet_start","");
+        String quietEnd=slideshow.optString("quiet_end","");
+        if(transition<0 || transition>2500 ||
+            !quietStart.matches("(?:[01]\\d|2[0-3]):[0-5]\\d|") ||
+            !quietEnd.matches("(?:[01]\\d|2[0-3]):[0-5]\\d|") ||
+            quietStart.isEmpty()!=quietEnd.isEmpty())
+            throw new IllegalArgumentException("Invalid slideshow transition or quiet hours");
         this.slideshow = new JSONObject(slideshow.toString());
     }
 
