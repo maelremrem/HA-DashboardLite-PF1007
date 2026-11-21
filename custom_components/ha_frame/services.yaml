@@ -27,3 +27,62 @@ set_dashboard:
       selector:
         text:
           multiline: true
+
+show_alert:
+  name: Show priority alert
+  description: Display an expiring prioritized message on one paired PF1007, without affecting other frames.
+  fields:
+    device_id:
+      name: Frame device ID
+      required: true
+      selector:
+        text:
+    title:
+      name: Title
+      selector:
+        text:
+    message:
+      name: Message
+      required: true
+      selector:
+        text:
+          multiline: true
+    duration:
+      name: Duration in seconds
+      default: 12
+      selector:
+        number:
+          min: 3
+          max: 60
+          mode: slider
+    priority:
+      name: Priority
+      description: "0 = low; 1 = normal; 2 = important; 3 = urgent."
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: slider
+
+sync_media_album:
+  name: Sync Home Assistant media album
+  description: Copy photos from a configured Home Assistant media directory to one paired PF1007. Requires an administrator or a system automation.
+  fields:
+    device_id:
+      name: Frame device ID
+      required: true
+      selector:
+        text:
+    source:
+      name: Media directory name
+      description: Name declared in homeassistant.media_dirs, usually local.
+      required: true
+      example: "local"
+      selector:
+        text:
+    folder:
+      name: Relative album folder
+      description: Folder inside the configured media directory; empty selects its root.
+      selector:
+        text:

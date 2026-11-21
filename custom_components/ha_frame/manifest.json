@@ -1,7 +1,7 @@
 {
   "domain": "ha_frame",
   "name": "HA Frame PF1007",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "documentation": "https://github.com/maelremrem/HA-DashboardLite-PF1007/blob/main/docs/home-assistant-integration.md",
   "issue_tracker": "https://github.com/maelremrem/HA-DashboardLite-PF1007/issues",
   "codeowners": [

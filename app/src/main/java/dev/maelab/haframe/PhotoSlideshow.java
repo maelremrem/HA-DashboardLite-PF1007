@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import java.io.File;
 import java.util.Arrays;
@@ -22,6 +23,8 @@ final class PhotoSlideshow {
     private final File folder;
     private final Runnable changed;
     private volatile Bitmap current;
+    private volatile Bitmap previous;
+    private volatile long transitionAt;
     private volatile boolean stopped;
     private int index;
 
@@ -34,6 +37,8 @@ final class PhotoSlideshow {
 
     File directory() { return folder; }
     Bitmap image() { return current; }
+    Bitmap previous() { return previous; }
+    long transitionAt() { return transitionAt; }
 
     void advance() {
         if (stopped || folder == null || !busy.compareAndSet(false, true)) return;
@@ -49,6 +54,7 @@ final class PhotoSlideshow {
                     });
                     if (files == null || files.length == 0) {
                         current = null;
+        previous = null;
                         return;
                     }
                     Arrays.sort(files, new Comparator<File>() {
@@ -69,7 +75,11 @@ final class PhotoSlideshow {
                     options.inSampleSize = sample;
                     options.inPreferredConfig = Bitmap.Config.RGB_565;
                     Bitmap picture = BitmapFactory.decodeFile(selected.getAbsolutePath(), options);
-                    if (!stopped && picture != null) current = picture;
+                    if (!stopped && picture != null) {
+                        previous = current;
+                        current = picture;
+                        transitionAt = SystemClock.elapsedRealtime();
+                    }
                 } catch (RuntimeException ignored) {
                     // A corrupt image must not terminate the dashboard.
                 } finally {

@@ -61,6 +61,30 @@ final class UpdateVerifier {
         return new Candidate(apk,update.versionName,hex.toString());
     }
 
+    /** Preserve the currently installed base APK once, for later ADB recovery. */
+    static File backupInstalled(Context context) throws Exception {
+        File directory=directory(context);
+        File destination=new File(directory,"backup-original.apk");
+        if(destination.isFile() && destination.length()>1024) return destination;
+        String source=context.getApplicationInfo().sourceDir;
+        File original=new File(source);
+        if(!original.isFile() || original.length()<1024 ||
+           original.length()>48L*1024*1024)
+            throw new IllegalStateException("Installed APK cannot be backed up");
+        File temporary=new File(directory,"backup-original.apk.tmp");
+        try(java.io.FileInputStream input=new java.io.FileInputStream(original);
+            java.io.FileOutputStream output=new java.io.FileOutputStream(temporary)) {
+            byte[] buffer=new byte[8192];int n;
+            while((n=input.read(buffer))!=-1)output.write(buffer,0,n);
+            output.getFD().sync();
+        }
+        if(!temporary.renameTo(destination)) {
+            temporary.delete();
+            throw new IllegalStateException("Failed to preserve previous APK");
+        }
+        return destination;
+    }
+
     static void launchInstaller(Activity activity,Candidate candidate) {
         Uri uri=FileProvider.getUriForFile(activity,activity.getPackageName()+".files",candidate.file);
         Intent install=new Intent(Intent.ACTION_VIEW);

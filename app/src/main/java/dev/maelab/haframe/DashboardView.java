@@ -55,7 +55,19 @@ final class DashboardView extends View {
     private String notificationTitle = "";
     private String notificationMessage = "";
     private long notificationUntil;
-    private final Runnable endNotification = () -> { notificationUntil = 0; invalidate(); };
+    private int notificationPriority;
+    private final java.util.ArrayList<Alert> alerts = new java.util.ArrayList<>();
+    private static final class Alert {
+        String title, message;
+        int priority;
+        long expires;
+        Alert(String title,String message,int priority,long expires) {
+            this.title=title;this.message=message;this.priority=priority;this.expires=expires;
+        }
+    }
+    private final Runnable endNotification = new Runnable() {
+        @Override public void run() {notificationUntil=0;showNextAlert();}
+    };
     private float scale = 1f;
     private float dx;
     private float dy;
@@ -71,9 +83,25 @@ final class DashboardView extends View {
     private boolean photoActive;
     private long lastInteraction = SystemClock.elapsedRealtime();
     private long lastPhotoAt;
+    private boolean slideshowQuiet() {
+        String start=config.slideshow.optString("quiet_start","");
+        String end=config.slideshow.optString("quiet_end","");
+        if (start.length()!=5 || end.length()!=5) return false;
+        try {
+            int a=Integer.parseInt(start.substring(0,2))*60 +
+                Integer.parseInt(start.substring(3,5));
+            int b=Integer.parseInt(end.substring(0,2))*60 +
+                Integer.parseInt(end.substring(3,5));
+            java.util.Calendar now=java.util.Calendar.getInstance();
+            int value=now.get(java.util.Calendar.HOUR_OF_DAY)*60+
+                now.get(java.util.Calendar.MINUTE);
+            return a<b ? value>=a&&value<b : a>b&&(value>=a||value<b);
+        } catch (NumberFormatException ignored) {return false;}
+    }
     private final Runnable slideshowTick = new Runnable() {
         @Override public void run() {
-            if (!sleeping && config.slideshow.optBoolean("enabled", false)) {
+            if (!sleeping && config.slideshow.optBoolean("enabled", false) &&
+                !slideshowQuiet()) {
                 long now = SystemClock.elapsedRealtime();
                 if (now - lastInteraction >= config.slideshow.optInt("idle_seconds",300)*1000L) {
                     if (!photoActive) {
@@ -151,14 +179,43 @@ final class DashboardView extends View {
     }
 
     void showNotification(String title, String message, int seconds) {
-        photoActive = false;
-        lastInteraction = SystemClock.elapsedRealtime();
+        showNotification(title,message,seconds,1);
+    }
+    void showNotification(String title,String message,int seconds,int priority) {
+        photoActive=false;
+        lastInteraction=SystemClock.elapsedRealtime();
         refreshCamera();
-        notificationTitle = title;
-        notificationMessage = message;
-        notificationUntil = SystemClock.elapsedRealtime() + seconds * 1000L;
+        long now=SystemClock.elapsedRealtime();
+        for(Alert item:alerts) {
+            if(item.title.equals(title)&&item.message.equals(message))return;
+        }
+        if(notificationUntil>now&&notificationTitle.equals(title)&&notificationMessage.equals(message))
+            return;
+        if(alerts.size()>=10)alerts.remove(0);
+        if(notificationUntil>now && priority>notificationPriority) {
+            alerts.add(new Alert(notificationTitle,notificationMessage,
+                notificationPriority,notificationUntil));
+            notificationUntil=0;
+        }
+        alerts.add(new Alert(title,message,priority,now+seconds*1000L));
+        if(notificationUntil<=now)showNextAlert();
+    }
+    private void showNextAlert() {
         removeCallbacks(endNotification);
-        postDelayed(endNotification, seconds * 1000L);
+        long now=SystemClock.elapsedRealtime();
+        Alert selected=null;
+        for(int i=alerts.size()-1;i>=0;i--) {
+            Alert item=alerts.get(i);
+            if(item.expires<=now) {alerts.remove(i);continue;}
+            if(selected==null||item.priority>selected.priority) selected=item;
+        }
+        if(selected==null) {notificationUntil=0;invalidate();return;}
+        alerts.remove(selected);
+        notificationTitle=selected.title;
+        notificationMessage=selected.message;
+        notificationPriority=selected.priority;
+        notificationUntil=selected.expires;
+        postDelayed(endNotification,Math.max(1L,notificationUntil-now));
         invalidate();
     }
     void setStatus(String status, boolean connected) {
@@ -289,9 +346,26 @@ final class DashboardView extends View {
         float w=picture.getWidth()*factor, h=picture.getHeight()*factor;
         paint.setColor(0xFFFFFFFF);
         paint.setFilterBitmap(true);
-        canvas.drawBitmap(picture,null,new RectF(
-            (getWidth()-w)/2f,(getHeight()-h)/2f,
-            (getWidth()+w)/2f,(getHeight()+h)/2f),paint);
+        RectF destination = new RectF((getWidth()-w)/2f,(getHeight()-h)/2f,
+            (getWidth()+w)/2f,(getHeight()+h)/2f);
+        Bitmap old = photos.previous();
+        int duration = config.slideshow.optInt("transition_ms",800);
+        long elapsed=SystemClock.elapsedRealtime()-photos.transitionAt();
+        boolean fading="local".equals(config.slideshow.optString("source","local")) &&
+            old != null && !old.isRecycled() && old != picture &&
+            duration>0 && elapsed<duration;
+        if(fading) {
+            float oldFactor=Math.min(getWidth()/(float)old.getWidth(),
+                getHeight()/(float)old.getHeight());
+            float oldW=old.getWidth()*oldFactor,oldH=old.getHeight()*oldFactor;
+            paint.setAlpha(255);
+            canvas.drawBitmap(old,null,new RectF((getWidth()-oldW)/2f,(getHeight()-oldH)/2f,
+                (getWidth()+oldW)/2f,(getHeight()+oldH)/2f),paint);
+            paint.setAlpha(Math.max(0,Math.min(255,(int)(255f*elapsed/duration))));
+        }
+        canvas.drawBitmap(picture,null,destination,paint);
+        paint.setAlpha(255);
+        if (fading) postInvalidateDelayed(32L);
         if (config.slideshow.optBoolean("show_clock",true)) {
             rect(canvas,16,16,142,56,11,0x99000000);
             text(canvas,clock.format(new Date()),28,55,32,0xFFFFFFFF,true,118);
@@ -476,8 +550,12 @@ final class DashboardView extends View {
                 customColor(ruleBackground, customColor(card.background, background)));
             canvas.save();
             canvas.clipRect(x + 1, y + 1, x + w - 1, y + h - 1);
-            String icon = card.iconPath.isEmpty() ? TileIcon.effective(card.icon, card.type) : "mdi:cached";
-            TileIcon.draw(canvas, paint, card.icon, card.iconPath, card.type,
+            String name = matchedRule && card.rule != null ?
+                card.rule.optString("icon", card.icon) : card.icon;
+            String path = matchedRule && card.rule != null ?
+                card.rule.optString("icon_path", card.iconPath) : card.iconPath;
+            String icon = path.isEmpty() ? TileIcon.effective(name, card.type) : "mdi:cached";
+            TileIcon.draw(canvas, paint, name, path, card.type,
                 x + w - 52, y + 15, 28, accent);
             text(canvas, card.label.isEmpty() ? card.entityId : card.label, x + 20, y + 39,
                 theme.size(20, "font-size", ".metric-label", category, slot),
@@ -531,19 +609,48 @@ final class DashboardView extends View {
                 } else {
                     drawTrend(canvas, history, x+20,y+94,w-40,Math.max(8,h-114),accent);
                 }
-            } else if ("calendar".equals(card.type)) {
-                String event = state.attributes.optString("message", state.state);
-                String starts = state.attributes.optString("start_time", "");
-                text(canvas,event,x+20,y+91,26,foreground,true,w-40);
-                text(canvas,starts.replace('T',' '),x+20,y+h-25,18,secondary,false,w-40);
-            } else if ("todo".equals(card.type)) {
-                text(canvas,state.state + " tâches",x+20,y+94,32,foreground,true,w-40);
-                text(canvas,"Liste Home Assistant",x+20,y+h-25,18,secondary,false,w-40);
+            } else if ("calendar".equals(card.type) || "todo".equals(card.type)) {
+                org.json.JSONArray events = client == null ? new org.json.JSONArray() :
+                    client.richItems(card.entityId);
+                int maxRows = Math.max(1, Math.min(4, (int)((h - 68) / 35f)));
+                if (events.length() == 0) {
+                    String fallback = "todo".equals(card.type) ?
+                        state.state + " tâches" :
+                        state.attributes.optString("message", "Aucun événement");
+                    text(canvas,fallback,x+20,y+Math.min(92,h-28),23,foreground,true,w-40);
+                } else {
+                    for(int j=0;j<events.length() && j<maxRows;j++) {
+                        org.json.JSONObject item=events.optJSONObject(j);
+                        if(item==null)continue;
+                        String title=item.optString("title","");
+                        String when=item.optString("when","");
+                        text(canvas,(j+1)+". "+title,x+20,y+77+j*35,21,foreground,j==0,w-40);
+                        if (w>340 && !when.isEmpty())
+                            text(canvas,when.replace('T',' '),x+w-145,y+77+j*35,
+                                14,secondary,false,125);
+                    }
+                }
             } else if ("bambu".equals(card.type)) {
                 text(canvas,state.state,x+20,y+90,26,foreground,true,w-40);
                 int progress = state.attributes.optInt("progress",-1);
-                if (progress >= 0) bar(canvas,x+20,y+h-34,w-40,progress,accent);
-                else text(canvas,state.attributes.optString("remaining_time",""),
+                if (client != null && !card.progressEntity.isEmpty()) {
+                    HaClient.EntityState percentage=client.get(card.progressEntity);
+                    if (percentage != null) {
+                        float number=parseNumber(percentage.state,Float.NaN);
+                        if (finite(number)) progress=Math.round(number);
+                    }
+                }
+                String remaining=state.attributes.optString("remaining_time","");
+                if (client!=null && !card.remainingEntity.isEmpty()) {
+                    HaClient.EntityState duration=client.get(card.remainingEntity);
+                    if(duration!=null && !"unavailable".equals(duration.state))
+                        remaining=duration.state;
+                }
+                if (progress>=0) {
+                    bar(canvas,x+20,y+h-34,w-40,progress,accent);
+                    text(canvas,progress+"% · "+remaining,x+20,y+h-51,
+                        18,secondary,false,w-40);
+                } else text(canvas,remaining,
                     x+20,y+h-26,18,secondary,false,w-40);
             } else if ("energy".equals(card.type) || "air_quality".equals(card.type)) {
                 text(canvas,state.state + (state.unit().isEmpty() ? "" : " " + state.unit()),
@@ -726,7 +833,7 @@ final class DashboardView extends View {
                     x >= 170 && x <= 1110 && y >= 235 && y <= 565) {
                     notificationUntil = 0;
                     touchedCard = -1;
-                    removeCallbacks(endNotification);
+                    showNextAlert();
                     invalidate();
                     return true;
                 }

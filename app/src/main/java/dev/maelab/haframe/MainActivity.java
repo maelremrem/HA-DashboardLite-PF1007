@@ -31,7 +31,7 @@ public final class MainActivity extends Activity implements HaClient.Listener {
             } else if (IntegrationApiServer.ACTION_NOTIFY.equals(action)) {
                 if (ambient != null) ambient.temporaryWake(Math.max(20000L, intent.getIntExtra("duration", 12) * 1000L));
                 dashboard.showNotification(intent.getStringExtra("title"), intent.getStringExtra("message"),
-                    intent.getIntExtra("duration", 12));
+                    intent.getIntExtra("duration", 12), intent.getIntExtra("priority",1));
             }
         }
     };

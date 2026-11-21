@@ -247,7 +247,50 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("GET".equals(req.method) && "/api/v1/logs".equals(req.path)) {
+                if ("POST".equals(req.method) && "/api/v1/photos/import_begin".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    String id=PhotoImportSession.begin(context,body.optInt("bytes",0),
+                        body.optString("sha256",""));
+                    send(out,200,new JSONObject().put("session",id));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/import_chunk".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    int bytes=PhotoImportSession.chunk(context,body.optString("session",""),
+                        body.optInt("part",-1),body.optString("data",""));
+                    send(out,200,new JSONObject().put("received",bytes));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/import_finish".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    String id=PhotoImportSession.finish(context,body.optString("session",""));
+                    send(out,200,new JSONObject().put("id",id));
+                } else if ("POST".equals(req.method) && "/api/v1/update/begin".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    String id=ApkStaging.begin(context,body.optInt("bytes",0),
+                        body.optString("sha256",""));
+                    send(out,200,new JSONObject().put("session",id));
+                } else if ("POST".equals(req.method) && "/api/v1/update/chunk".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    int received=ApkStaging.chunk(context,body.optString("session",""),
+                        body.optInt("part",-1),body.optString("data",""));
+                    send(out,200,new JSONObject().put("received",received));
+                } else if ("POST".equals(req.method) && "/api/v1/update/finish".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    UpdateVerifier.Candidate candidate=ApkStaging.finish(
+                        context,body.optString("session",""));
+                    send(out,200,new JSONObject().put("version",candidate.version)
+                        .put("sha256",candidate.sha256)
+                        .put("ready_for_local_confirmation",true));
+                } else if ("GET".equals(req.method) && "/api/v1/photos".equals(req.path)) {
+                    send(out, 200, new JSONObject().put("photos", PhotoLibrary.list(context)));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/upload".equals(req.path)) {
+                    JSONObject request = new JSONObject(req.body);
+                    if (!"image/jpeg".equals(request.optString("type","")))
+                        throw new IllegalArgumentException("Only JPEG photos allowed");
+                    String id = PhotoLibrary.add(context,request.optString("data",""));
+                    send(out, 200, new JSONObject().put("id",id));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/delete".equals(req.path)) {
+                    JSONObject request = new JSONObject(req.body);
+                    boolean removed = PhotoLibrary.delete(context,request.optString("id",""));
+                    send(out, 200, new JSONObject().put("deleted",removed));
+                } else if ("GET".equals(req.method) && "/api/v1/logs".equals(req.path)) {
                     send(out, 200, new JSONObject().put("events", DiagnosticLog.snapshot()));
                 } else if ("GET".equals(req.method) && "/api/v1/screenshot".equals(req.path)) {
                     long now = SystemClock.elapsedRealtime();
@@ -318,10 +361,13 @@ final class IntegrationApiServer {
                     String title = data.optString("title", "Home Assistant");
                     String message = data.optString("message", "");
                     int seconds = data.optInt("duration", 12);
-                    if (message.isEmpty() || message.length() > 500 || title.length() > 80 || seconds < 3 || seconds > 60)
+                    int priority = data.optInt("priority",1);
+                    if (priority < 0 || priority > 3 ||
+                        message.isEmpty() || message.length() > 500 || title.length() > 80 || seconds < 3 || seconds > 60)
                         throw new IllegalArgumentException("Invalid notification");
                     context.sendBroadcast(new Intent(ACTION_NOTIFY).setPackage(context.getPackageName())
-                        .putExtra("title", title).putExtra("message", message).putExtra("duration", seconds));
+                        .putExtra("title", title).putExtra("message", message)
+                        .putExtra("priority", priority).putExtra("duration", seconds));
                     NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                     if (manager != null) manager.notify(1001, new Notification.Builder(context)
                         .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title)

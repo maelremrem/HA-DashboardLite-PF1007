@@ -1,5 +1,5 @@
 /* HA Frame visual editor - bundled with the Home Assistant integration. */
-const CARD_VERSION = "2.1.0";
+const CARD_VERSION = "2.2.0";
 const TYPES = [
   ["metric", "Capteur"], ["control", "Commande"], ["gauge", "Jauge"],
   ["thermostat", "Thermostat"], ["light", "Lumière"], ["cover", "Volet"],
@@ -24,7 +24,7 @@ const LONG_PRESS_ACTIONS = [
 const RULE_ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
 function checkRule(rule, visual = true) {
   if (!rule || typeof rule !== "object" || Array.isArray(rule)) return "Règle invalide";
-  const keys = ["entity_id","operator","value",...(visual?["hide","background"]:[])];
+  const keys = ["entity_id","operator","value",...(visual?["hide","background","icon","icon_path"]:[])];
   if (Object.keys(rule).some(k=>!keys.includes(k))) return "Option de règle interdite";
   if (rule.operator!=="time_between" && !RULE_ENTITY_RE.test(rule.entity_id||"")) return "Entité de condition invalide";
   if (rule.operator==="time_between" && rule.entity_id &&
@@ -39,6 +39,9 @@ function checkRule(rule, visual = true) {
       !/^(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d$/.test(rule.value)) {
     return "Plage horaire invalide (HH:MM-HH:MM)";
   }
+  if ("icon" in rule && rule.icon && !MDI_REGEX.test(rule.icon)) return "Icône MDI conditionnelle invalide";
+  if ("icon_path" in rule && (typeof rule.icon_path!=="string" || rule.icon_path.length>8192 ||
+      !MDI_PATH_REGEX.test(rule.icon_path))) return "Chemin de l’icône conditionnelle invalide";
   if ("hide" in rule && typeof rule.hide !== "boolean") return "Masquage invalide";
   if ("background" in rule && !/^#[0-9a-fA-F]{6}$/.test(rule.background)) return "Couleur invalide";
   return "";
@@ -496,6 +499,12 @@ class HaFrameVisualEditor extends HTMLElement {
     this._deviceStatus = null;
     this._screenshot = "";
     this._deviceEvents = [];
+    this._photoLibrary = [];
+    this._mediaRoots = [];
+    this._mediaSource = "";
+    this._mediaFolder = "";
+    this._mediaBrowse = {folders:[],photos:0};
+    this._apkProgress = "";
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -793,8 +802,13 @@ class HaFrameVisualEditor extends HTMLElement {
         hint = "Liste Home Assistant";
       } else if (tile.type === "bambu") {
         value = raw;
-        percent = Number.isFinite(Number(attrs.progress)) ? Number(attrs.progress) : null;
-        hint = attrs.remaining_time || attrs.friendly_name || "Imprimante 3D";
+        const progressState=tile.progress_entity && states[tile.progress_entity];
+        const timeState=tile.remaining_entity && states[tile.remaining_entity];
+        const progressValue=progressState ? progressState.state : attrs.progress;
+        percent = progressValue!==undefined && Number.isFinite(Number(progressValue)) ?
+          Number(progressValue) : null;
+        hint = (percent==null?"":Math.round(percent)+"% · ") +
+          (timeState?.state || attrs.remaining_time || attrs.friendly_name || "Imprimante 3D");
       } else if (["energy","air_quality"].includes(tile.type)) {
         value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
       } else if (tile.type === "presence") {
@@ -840,7 +854,7 @@ class HaFrameVisualEditor extends HTMLElement {
             action + "' data-resize-index='" + i + "' aria-label='" + title +
             "' title='" + title + "'" + (disabled ? " disabled" : "") + ">" + symbol + "</button>").join("") +
         "</div>";
-      const icon = tileIconMarkup(tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
+      const icon = tileIconMarkup(conditionTrue && tile.rule?.icon || tile.icon || "", tile.type, accent, tile.entity_id, this._hass);
       const ring = tile.type === "circular_gauge" ? "<svg class='tile-circle' viewBox='0 0 100 100' aria-hidden='true'>" +
         "<circle cx='50' cy='50' r='39' stroke='#70839855' stroke-width='9' fill='none'/>" +
         "<circle cx='50' cy='50' r='39' stroke='" + accent + "' stroke-width='9' fill='none' " +
@@ -950,9 +964,13 @@ class HaFrameVisualEditor extends HTMLElement {
         (this._panel==="device" ? "<div class='actions'><button data-action='logs-refresh'>Événements du cadre</button></div>" +
           "<pre class='device-log'>" + esc(this._deviceEvents.join("\n")) + "</pre>" : "") +
         (this._panel==="updates" ?
-          "<p class='hint'>Mise à jour sécurisée : vérifie l’empreinte de signature de l’APK, " +
-          "puis installe la nouvelle version depuis Fedora avec adb install -r. " +
-          "L’installation distante automatique reste désactivée tant qu’une signature stable et un mécanisme de récupération n’ont pas été validés sur l’appareil.</p>" :
+          "<div class='inspector-head'><strong>Préparer un APK depuis Studio</strong></div>" +
+          "<button data-action='apk-pick'>Envoyer un APK signé sur le cadre</button>" +
+          "<input type='file' data-apk-file accept='.apk,application/vnd.android.package-archive' hidden>" +
+          "<p class='hint' data-apk-progress>" + esc(this._apkProgress || "Aucune mise à jour préparée") + "</p>" +
+          "<p class='hint'>L’envoi vérifie le SHA-256, le nom de package et le certificat de signature. " +
+          "Il n’installe rien à distance : sur le cadre, ouvre Réglages puis Vérifier un APK. " +
+          "Conserve une sauvegarde de l'APK précédent pour récupération.</p>" :
           "<p class='hint'>L’image est uniquement récupérée sur demande via le LAN authentifié, en JPEG 640×400. " +
           "Recharger redémarre l’affichage de l’application, pas Android.</p>");
     } else if (this._panel === "profiles") {
@@ -989,11 +1007,41 @@ class HaFrameVisualEditor extends HTMLElement {
         "<label class='field'>Source<select data-bind='photo-source'>" +
           option("local","Photos locales sur le cadre",opts.source) +
           option("camera","Caméra Home Assistant",opts.source) + option("image","Image Home Assistant",opts.source) + "</select></label>" +
+        "<label class='field'>Fondu (millisecondes)<input type='number' data-bind='photo-transition' min='0' max='2500' value='" +
+          esc(opts.transition_ms ?? 800) + "'></label>" +
+        "<label class='field'>Silence / veille de HH:MM à HH:MM<input data-bind='photo-quiet-start' " +
+          "placeholder='22:00' value='" + esc(opts.quiet_start||"") + "'></label>" +
+        "<label class='field'>Fin de la plage de silence<input data-bind='photo-quiet-end' " +
+          "placeholder='07:00' value='" + esc(opts.quiet_end||"") + "'></label>" +
         (opts.source!=="local" ? "<label class='field'>Entité caméra ou image<input data-bind='photo-camera' " +
           "list='ha-frame-entities' placeholder='camera.salon' value='" +
           esc(opts.camera_entity||"") + "'></label>" : "") +
         "<label class='field'><span>Horloge sur les photos</span><input type='checkbox' data-bind='photo-clock'" +
           (opts.show_clock?" checked":"") + "></label>" +
+        "<div class='inspector-head'><strong>Synchronisation depuis les médias Home Assistant</strong></div>" +
+        "<label class='field'>Bibliothèque HA<select data-control='media-source'>" +
+          this._mediaRoots.map(name=>option(name,name,this._mediaSource)).join("") +
+        "</select></label>" +
+        "<label class='field'>Dossier (relatif à cette bibliothèque)<input data-control='media-folder' " +
+          "value='" + esc(this._mediaFolder) + "' placeholder='Famille/Vacances'></label>" +
+        "<div class='actions'><button data-action='media-parent'>Dossier parent</button>" +
+          "<button data-action='media-browse'>Parcourir</button>" +
+          "<button data-action='media-sync'>Synchroniser vers ce cadre</button></div>" +
+        "<p class='hint'>Photos dans ce dossier : " + this._mediaBrowse.photos +
+          " · Dossiers enfants : " + this._mediaBrowse.folders.length + "</p>" +
+        "<div class='actions'>" + this._mediaBrowse.folders.map(name=>
+          "<button class='btn-small' data-media-entry='" + esc(name) + "'>" +
+          esc(name) + "</button>").join("") + "</div>" +
+        "<div class='inspector-head'><strong>Bibliothèque de photos du cadre</strong></div>" +
+        "<div class='actions'><button data-action='photo-pick'>Ajouter des photos</button>" +
+        "<button data-action='photos-refresh'>Actualiser</button></div>" +
+        "<input data-photo-import type='file' accept='image/jpeg,image/png,image/webp' multiple hidden>" +
+        "<label class='field'>Photos stockées sur ce cadre (" + this._photoLibrary.length +
+        ")<select data-control='photo-picker'>" +
+        this._photoLibrary.map(p=>option(p.id,p.id+" · "+Math.ceil(p.bytes/1024)+" Ko","")).join("") +
+        "</select></label><button data-action='photo-delete' class='danger'>Supprimer la photo sélectionnée</button>" +
+        "<p class='hint'>Ajoute directement depuis ton navigateur. Chaque image est réduite à 1280×800 puis envoyée " +
+        "via Home Assistant sur le réseau local privé de ce cadre. L’envoi n’impacte pas les autres cadres.</p>" +
         "<p class='hint'>Photos locales : copie des JPG/PNG (maximum 6 Mo chacun) dans " +
         "Android/data/dev.maelab.haframe/files/Pictures/HAFrame/ sur le cadre. " +
         "Le défilement est suspendu pendant la veille noire. Source caméra : image authentifiée via HA.</p>";
@@ -1050,6 +1098,15 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type==="camera" ? "<p class='hint'>Flux MJPEG via Home Assistant, avec repli JPEG (≈ 1 image/s). Un seul flux actif sur le cadre, sans audio. APK 1.0.0 requis.</p>" : "") +
         (tile.type==="graph" ? "<p class='hint'>Courbe des 24 derniers changements de valeur depuis la connexion du cadre ; sans historique permanent.</p>" : "") +
         (tile.type==="weather" ? "<p class='hint'>Utilise une entité météo Home Assistant : weather.*</p>" : "") +
+        (tile.type==="bambu" ?
+          "<label class='field'>Capteur progression (%)<input data-bind='bambu-progress' " +
+          "list='ha-frame-entities' placeholder='sensor.x1c_progression' value='" +
+          esc(tile.progress_entity||"") + "'></label>" +
+          "<label class='field'>Capteur temps restant<input data-bind='bambu-remaining' " +
+          "list='ha-frame-entities' placeholder='sensor.x1c_temps_restant' value='" +
+          esc(tile.remaining_entity||"") + "'></label>" +
+          "<p class='hint'>Relie les capteurs existants de ton intégration Bambu Lab, indépendamment de l’entité d’état.</p>"
+          : "") +
         (["gauge","circular_gauge"].includes(tile.type) ?
           "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
@@ -1102,6 +1159,9 @@ class HaFrameVisualEditor extends HTMLElement {
         "</select></label>" +
         "<label class='field'>Couleur si vrai<input type='color' data-bind='rule-background' value='" +
           esc(tile.rule?.background||"#ad4c43") + "'></label>" +
+        "<label class='field'>Icône MDI si vrai<input data-bind='rule-icon' list='ha-frame-mdi' " +
+          "maxlength='96' placeholder='mdi:alert' value='" + esc(tile.rule?.icon||"") +
+          "'></label>" +
         "<p class='hint'>La condition est évaluée localement sur le cadre. La place d’une tuile masquée reste réservée dans la grille.</p>" +
         "<div class='actions'><button data-action='clear-tile-rule'>Effacer la condition</button></div>" +
         "<div class='actions'><button data-action='clear-tile-style'>Réinitialiser le style</button>" +
@@ -1151,6 +1211,15 @@ class HaFrameVisualEditor extends HTMLElement {
       this._panel = "page";
       this._render(); return;
     }
+    const mediaDirectory = event.target.closest("[data-media-entry]");
+    if (mediaDirectory) {
+      const name=mediaDirectory.dataset.mediaEntry;
+      if (name && !name.includes("/") && name!==".." && name!==".") {
+        this._mediaFolder=[this._mediaFolder,name].filter(Boolean).join("/");
+        this._browseMedia();
+      }
+      return;
+    }
     const theme = event.target.closest("[data-preset]");
     if (theme) { this._applyPreset(theme.dataset.preset); return; }
     const layout = event.target.closest("[data-layout]");
@@ -1160,6 +1229,17 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (target.dataset.apkFile !== undefined) {
+      this._uploadApk(target.files && target.files[0]);
+      target.value="";
+      return;
+    }
+    if (target.dataset.photoImport !== undefined) {
+      const files = target.files;
+      this._uploadPhotos(files);
+      target.value = "";
+      return;
+    }
     if (target.dataset.importFile !== undefined) {
       this._importFile(target.files && target.files[0]);
       target.value = "";
@@ -1168,6 +1248,11 @@ class HaFrameVisualEditor extends HTMLElement {
     if (this._busy) {
       if (target.dataset.control === "frame") target.value = this._frameId;
       return;
+    }
+    if (target.dataset.control === "media-source") {
+      this._mediaSource=target.value;
+      this._mediaFolder="";
+      this._browseMedia();return;
     }
     if (target.dataset.control === "frame") {
       const next = target.value, previous = this._frameId;
@@ -1215,6 +1300,9 @@ class HaFrameVisualEditor extends HTMLElement {
       if (bind === "photo-interval") options.interval_seconds = Number(target.value);
       if (bind === "photo-source") options.source = target.value;
       if (bind === "photo-camera") options.camera_entity = target.value.trim();
+      if (bind === "photo-transition") options.transition_ms = Number(target.value);
+      if (bind === "photo-quiet-start") options.quiet_start = target.value.trim();
+      if (bind === "photo-quiet-end") options.quiet_end = target.value.trim();
       this._mark();
       this._preview();
       return;
@@ -1242,9 +1330,17 @@ class HaFrameVisualEditor extends HTMLElement {
         return;
       }
     } else if (tile) {
-      if (bind === "card-type") tile.type = target.value;
+      if (bind === "card-type") {
+        tile.type = target.value;
+        if (tile.type!=="bambu") {
+          delete tile.progress_entity;
+          delete tile.remaining_entity;
+        }
+      }
       if (bind === "card-label") tile.label = target.value;
       if (bind === "card-entity") tile.entity_id = target.value.trim();
+      if (bind === "bambu-progress") tile.progress_entity = target.value.trim();
+      if (bind === "bambu-remaining") tile.remaining_entity = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
       if (bind === "history-hours") tile.history_hours = Number(target.value);
@@ -1258,6 +1354,14 @@ class HaFrameVisualEditor extends HTMLElement {
         if (prop === "value") next.value = target.value;
         if (prop === "hide") next.hide = target.value === "true";
         if (prop === "background") next.background = target.value;
+        if (prop === "icon") {
+          if (target.value.trim() && !MDI_REGEX.test(target.value.trim())) {
+            this._message("Choisir une icône mdi: valide",true);return;
+          }
+          if (target.value.trim()) next.icon = target.value.trim();
+          else delete next.icon;
+          delete next.icon_path;
+        }
         if (!next.entity_id && next.operator!=="time_between") delete tile.rule;
         else tile.rule = next;
       }
@@ -1388,7 +1492,11 @@ class HaFrameVisualEditor extends HTMLElement {
           !Number.isInteger(v.idle_seconds) || v.idle_seconds<30 || v.idle_seconds>3600 ||
           !Number.isInteger(v.interval_seconds) || v.interval_seconds<5 || v.interval_seconds>300 ||
           !["local","camera","image"].includes(v.source) ||
-          (v.source!=="local" && !/^(?:camera|image)\.[a-z0-9_]+$/.test(v.camera_entity||""))) {
+          (v.source!=="local" && !/^(?:camera|image)\.[a-z0-9_]+$/.test(v.camera_entity||"")) ||
+          !Number.isInteger(v.transition_ms??800) || (v.transition_ms??800)<0 ||
+          (v.transition_ms??800)>2500 ||
+          (!!v.quiet_start !== !!v.quiet_end) ||
+          [v.quiet_start||"",v.quiet_end||""].some(t=>t&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t))) {
         return "Paramètres du diaporama invalides";
       }
       const active=this._frames.find(f=>f.entry_id===this._frameId);
@@ -1414,6 +1522,9 @@ class HaFrameVisualEditor extends HTMLElement {
           const problem = checkRule(tile.rule, true);
           if (problem) return "Tuile conditionnelle : " + problem;
         }
+        if (["progress_entity","remaining_entity"].some(key=>
+          tile[key] && (tile.type!=="bambu" || !RULE_ENTITY_RE.test(tile[key]))))
+          return "Capteur Bambu invalide";
         if (!TAP_ACTIONS.some(([key])=>key===(tile.tap_action||"default"))) return "Action tactile invalide";
         if (!LONG_PRESS_ACTIONS.some(([key])=>key===(tile.long_press||"none"))) return "Appui long invalide";
         if (tile.history_hours && ![1,24,168].includes(tile.history_hours)) return "Période historique invalide";
@@ -1478,6 +1589,15 @@ class HaFrameVisualEditor extends HTMLElement {
     const resolved = new Map();
     for (const page of result.pages) {
       for (const tile of page.cards) {
+        if (tile.rule && tile.rule.icon) {
+          const key="rule|"+tile.rule.icon;
+          let rulePath=resolved.get(key);
+          if (!rulePath) {
+            rulePath=await this._resolveIconPath(tile.rule.icon,null);
+            resolved.set(key,rulePath);
+          }
+          tile.rule.icon_path=rulePath;
+        }
         if (tile.icon === "none") {
           delete tile.icon_path;
           continue;
@@ -1580,6 +1700,49 @@ class HaFrameVisualEditor extends HTMLElement {
     link.remove();
     URL.revokeObjectURL(url);
   }
+  async _uploadApk(file) {
+    if (!file || this._busy) return;
+    if (file.size<1024 || file.size>48*1024*1024 || !/\.apk$/i.test(file.name))
+      return this._message("Sélectionne un APK de moins de 48 Mo",true);
+    if (!globalThis.crypto?.subtle) return this._message("HTTPS requis pour calculer le SHA-256",true);
+    if (!confirm("Préparer cette mise à jour sur le cadre ? La version installée ne sera pas modifiée."))return;
+    const frameId=this._frameId;
+    this._busy=true;
+    const progress=text=>{
+      this._apkProgress=text;
+      const label=this.shadowRoot.querySelector("[data-apk-progress]");
+      if(label)label.textContent=text;
+    };
+    try {
+      progress("Calcul de l’empreinte SHA-256…");
+      const digest=await crypto.subtle.digest("SHA-256",await file.arrayBuffer());
+      const sha256=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join("");
+      const begin=await this._hass.callWS({type:"ha_frame/editor/apk_begin",entry_id:frameId,
+        bytes:file.size,sha256});
+      const session=begin.session;
+      if (!/^[0-9a-f]{32}$/.test(session||"")) throw new Error("Session de transfert invalide");
+      const step=60000;
+      for(let offset=0,part=0;offset<file.size;offset+=step,part++) {
+        if(frameId!==this._frameId)throw new Error("Cadre modifié pendant le transfert");
+        const bytes=new Uint8Array(await file.slice(offset,offset+step).arrayBuffer());
+        let binary="";
+        for(let i=0;i<bytes.length;i+=8192)
+          binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+        await this._hass.callWS({type:"ha_frame/editor/apk_chunk",
+          entry_id:frameId,session,part,data:btoa(binary)});
+        progress("Transfert sécurisé : "+Math.round(100*Math.min(file.size,offset+step)/file.size)+"%");
+      }
+      progress("Vérification de la signature sur le cadre…");
+      const result=await this._hass.callWS({type:"ha_frame/editor/apk_finish",
+        entry_id:frameId,session});
+      if(!result.ready_for_local_confirmation)throw new Error("Signature APK non validée");
+      progress("APK "+result.version+" vérifié et prêt. Confirme l’installation sur le PF1007 dans les réglages.");
+      this._message("APK préparé et vérifié. Confirmation locale requise.",false);
+    }catch(error){
+      progress("Échec : "+(error.message||error));
+      this._message("Mise à jour refusée : "+(error.message||error),true);
+    }finally{this._busy=false;}
+  }
   async _refreshDiagnostics() {
     const frameId=this._frameId;
     try {
@@ -1631,6 +1794,122 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
   }
+  async _loadMediaRoots() {
+    try {
+      const response=await this._hass.callWS({type:"ha_frame/editor/media_roots"});
+      this._mediaRoots=(response.roots||[]).slice(0,30);
+      if(!this._mediaRoots.includes(this._mediaSource))
+        this._mediaSource=this._mediaRoots[0]||"";
+      if(this._mediaSource)await this._browseMedia();
+    }catch(error) {
+      this._message("Médias Home Assistant indisponibles : "+(error.message||error),true);
+    }
+  }
+  async _browseMedia() {
+    if(!this._mediaSource)return;
+    const folder=this._mediaFolder,source=this._mediaSource;
+    try {
+      const result=await this._hass.callWS({type:"ha_frame/editor/media_browse",source,folder});
+      if(folder!==this._mediaFolder || source!==this._mediaSource)return;
+      this._mediaBrowse=result||{folders:[],photos:0};
+      if(this._panel==="photos")this._inspector();
+    }catch(error) {
+      this._message("Dossier inaccessible : "+(error.message||error),true);
+    }
+  }
+  async _mediaAction(action) {
+    if(action==="media-parent") {
+      this._mediaFolder=this._mediaFolder.split("/").slice(0,-1).join("/");
+      return this._browseMedia();
+    }
+    const input=this.shadowRoot.querySelector("[data-control='media-folder']");
+    if(input)this._mediaFolder=input.value.trim();
+    if(action==="media-browse")return this._browseMedia();
+    if(action==="media-sync") {
+      if(!this._mediaSource)return this._message("Choisir une bibliothèque HA",true);
+      if(!confirm("Synchroniser les photos de cet album vers le cadre sélectionné ?"))return;
+      const frameId=this._frameId;
+      this._busy=true;
+      this._message("Synchronisation album en cours…",false);
+      try {
+        const result=await this._hass.callWS({type:"ha_frame/editor/media_sync",
+          entry_id:frameId,source:this._mediaSource,folder:this._mediaFolder});
+        if(frameId===this._frameId) {
+          this._message(result.transferred+" photo(s) envoyée(s), "+
+            result.unchanged+" déjà présentes",false);
+          await this._refreshPhotos();
+        }
+      }catch(error){
+        this._message("Synchronisation interrompue : "+(error.message||error),true);
+      }finally{this._busy=false;}
+    }
+  }
+  async _refreshPhotos() {
+    const frameId=this._frameId;
+    try {
+      const response=await this._hass.callWS({type:"ha_frame/editor/photos",entry_id:frameId});
+      if (frameId!==this._frameId) return;
+      this._photoLibrary=(response.photos||[]).slice(0,100).filter(p=>
+        /^photo_[0-9a-f]{16}\.jpg$/.test(p.id));
+      if (this._panel==="photos") this._inspector();
+    } catch(error) {this._message("Bibliothèque : "+(error.message||error),true);}
+  }
+  async _photoAction(action) {
+    if (action==="photo-pick") {
+      this.shadowRoot.querySelector("[data-photo-import]")?.click();
+      return;
+    }
+    if (action==="photos-refresh") return this._refreshPhotos();
+    if (action==="photo-delete") {
+      const id=this.shadowRoot.querySelector("[data-control='photo-picker']")?.value;
+      if (!id || !confirm("Supprimer cette photo du cadre ?")) return;
+      try {
+        await this._hass.callWS({type:"ha_frame/editor/photo_delete",
+          entry_id:this._frameId,id});
+        await this._refreshPhotos();
+      } catch(error){this._message("Suppression refusée : "+(error.message||error),true);}
+    }
+  }
+  async _uploadPhotos(files) {
+    const frameId=this._frameId;
+    if (!files?.length || this._busy) return;
+    if (files.length>30) return this._message("30 photos maximum par envoi",true);
+    this._busy=true;
+    let uploaded=0;
+    try {
+      for (const file of files) {
+        if (frameId!==this._frameId) break;
+        if (!["image/jpeg","image/png","image/webp"].includes(file.type) ||
+            file.size>10*1024*1024) throw new Error("Image non supportée ou supérieure à 10 Mo");
+        const bitmap=await createImageBitmap(file);
+        try {
+          const factor=Math.min(1,1280/bitmap.width,800/bitmap.height);
+          let width=Math.max(1,Math.round(bitmap.width*factor));
+          let height=Math.max(1,Math.round(bitmap.height*factor));
+          let base64="";
+          for(let attempt=0;attempt<7;attempt++) {
+            const canvas=document.createElement("canvas");
+            canvas.width=width;canvas.height=height;
+            canvas.getContext("2d").drawImage(bitmap,0,0,width,height);
+            base64=canvas.toDataURL("image/jpeg",Math.max(.35,.75-attempt*.07)).split(",")[1];
+            if (base64.length<=125000) break;
+            width=Math.max(1,Math.round(width*.8));
+            height=Math.max(1,Math.round(height*.8));
+          }
+          if (!base64 || base64.length>125000) throw new Error("Impossible de réduire cette image");
+          await this._hass.callWS({type:"ha_frame/editor/photo_upload",
+            entry_id:frameId,data:base64});
+          uploaded++;
+          this._message("Photos envoyées : "+uploaded+" / "+files.length,false);
+        } finally {bitmap.close?.();}
+      }
+    } catch(error) {
+      this._message("Transfert interrompu après "+uploaded+" photo(s) : "+(error.message||error),true);
+    } finally {
+      this._busy=false;
+      if (frameId===this._frameId) await this._refreshPhotos();
+    }
+  }
   async _libraryAction(action) {
     try {
       if (action === "import-layout") {
@@ -1679,9 +1958,24 @@ class HaFrameVisualEditor extends HTMLElement {
       return;
     }
     const page = this._pageObject(), tile = this._tileObject();
+    if (action === "photos") {
+      this._panel="photos";this._tile=-1;
+      this._render();
+      await Promise.all([this._refreshPhotos(),this._loadMediaRoots()]);
+      return;
+    }
+    if (["media-parent","media-browse","media-sync"].includes(action))
+      return this._mediaAction(action);
+    if (["photo-pick","photos-refresh","photo-delete"].includes(action)) {
+      return this._photoAction(action);
+    }
     if (action === "profiles") {
       this._panel="profiles";this._tile=-1;
       await this._loadLibrary();this._render();return;
+    }
+    if (action==="apk-pick") {
+      this.shadowRoot.querySelector("[data-apk-file]")?.click();
+      return;
     }
     if (action==="device" || action==="updates") {
       this._panel=action;this._tile=-1;

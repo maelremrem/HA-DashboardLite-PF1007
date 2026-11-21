@@ -21,6 +21,8 @@ final class FrameConfig {
         String type;
         String label;
         String entityId;
+        String progressEntity = "";
+        String remainingEntity = "";
         float min = 0;
         float max = 100;
         int colSpan = 1;
@@ -56,6 +58,8 @@ final class FrameConfig {
             if (!icon.isEmpty()) item.put("icon", icon);
             if (!iconPath.isEmpty()) item.put("icon_path", iconPath);
             if (historyHours != 24) item.put("history_hours", historyHours);
+            if (!progressEntity.isEmpty()) item.put("progress_entity", progressEntity);
+            if (!remainingEntity.isEmpty()) item.put("remaining_entity", remainingEntity);
             if (rule != null) item.put("rule", rule);
             if (!"default".equals(tapAction)) item.put("tap_action", tapAction);
             if (!"none".equals(longPress)) item.put("long_press", longPress);
@@ -109,19 +113,21 @@ final class FrameConfig {
         try {
             return new JSONObject().put("enabled", false).put("idle_seconds", 300)
                 .put("interval_seconds", 30).put("show_clock", true)
-                .put("source", "local").put("camera_entity", "");
+                .put("source", "local").put("camera_entity", "")
+                .put("transition_ms", 800).put("quiet_start", "").put("quiet_end", "");
         } catch (Exception ignored) { return new JSONObject(); }
     }
 
     void setSlideshow(JSONObject slideshow) throws Exception {
-        if (slideshow == null || slideshow.length() > 6)
+        if (slideshow == null || slideshow.length() > 9)
             throw new IllegalArgumentException("Invalid slideshow");
         java.util.Iterator<String> keys = slideshow.keys();
         while (keys.hasNext()) {
             String key = keys.next();
             if (!("enabled".equals(key) || "idle_seconds".equals(key) ||
                 "interval_seconds".equals(key) || "show_clock".equals(key) ||
-                "source".equals(key) || "camera_entity".equals(key))) {
+                "source".equals(key) || "camera_entity".equals(key) ||
+                "transition_ms".equals(key) || "quiet_start".equals(key) || "quiet_end".equals(key))) {
                 throw new IllegalArgumentException("Unknown slideshow setting");
             }
         }
@@ -141,6 +147,14 @@ final class FrameConfig {
             (!"local".equals(source) && entity.isEmpty())) {
             throw new IllegalArgumentException("Invalid slideshow source or timing");
         }
+        int transition=slideshow.optInt("transition_ms",800);
+        String quietStart=slideshow.optString("quiet_start","");
+        String quietEnd=slideshow.optString("quiet_end","");
+        if(transition<0 || transition>2500 ||
+            !quietStart.matches("(?:[01]\\d|2[0-3]):[0-5]\\d|") ||
+            !quietEnd.matches("(?:[01]\\d|2[0-3]):[0-5]\\d|") ||
+            quietStart.isEmpty()!=quietEnd.isEmpty())
+            throw new IllegalArgumentException("Invalid slideshow transition or quiet hours");
         this.slideshow = new JSONObject(slideshow.toString());
     }
 
@@ -220,6 +234,16 @@ final class FrameConfig {
                 Card card = new Card(type, label, entity);
                 card.min = (float) item.optDouble("min", 0);
                 card.max = (float) item.optDouble("max", 100);
+                card.progressEntity = item.optString("progress_entity","");
+                card.remainingEntity = item.optString("remaining_entity","");
+                if (!card.progressEntity.isEmpty() &&
+                    !card.progressEntity.matches("[a-z0-9_]+\\.[a-z0-9_]+") ||
+                    !card.remainingEntity.isEmpty() &&
+                    !card.remainingEntity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))
+                    throw new IllegalArgumentException("Invalid Bambu entity link");
+                if (!"bambu".equals(type) &&
+                    (!card.progressEntity.isEmpty() || !card.remainingEntity.isEmpty()))
+                    throw new IllegalArgumentException("Entity links are only for Bambu widgets");
                 card.historyHours = item.optInt("history_hours", 24);
                 if (card.historyHours != 1 && card.historyHours != 24 && card.historyHours != 168)
                     throw new IllegalArgumentException("Invalid history period");
@@ -308,6 +332,8 @@ final class FrameConfig {
             if (page.activateWhen != null) unique.add(page.activateWhen.optString("entity_id"));
             for (Card card : page.cards) {
                 if (!card.entityId.isEmpty()) unique.add(card.entityId);
+                if (!card.progressEntity.isEmpty()) unique.add(card.progressEntity);
+                if (!card.remainingEntity.isEmpty()) unique.add(card.remainingEntity);
                 if (card.rule != null) unique.add(card.rule.optString("entity_id"));
             }
         }

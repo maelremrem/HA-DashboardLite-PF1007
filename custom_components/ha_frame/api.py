@@ -50,13 +50,65 @@ class FrameApi:
     async def update(self, values: dict) -> None:
         await self.call("POST", "/api/v1/config", values)
 
-    async def notify(self, message: str, title: str = "Home Assistant", duration: int = 12) -> None:
+    async def notify(self, message: str, title: str = "Home Assistant",
+                     duration: int = 12, priority: int = 1) -> None:
         await self.call("POST", "/api/v1/notify", {
-            "message": message, "title": title, "duration": duration
+            "message": message, "title": title, "duration": duration,
+            "priority": priority,
         })
 
     async def wake(self) -> None:
         await self.call("POST", "/api/v1/wake", {})
+
+    async def apk_begin(self, total_bytes: int, sha256: str) -> str:
+        response=await self.call("POST","/api/v1/update/begin",{
+            "bytes":total_bytes,"sha256":sha256,
+        })
+        return response["session"]
+
+    async def apk_chunk(self, session: str, part: int, data: str) -> int:
+        response=await self.call("POST","/api/v1/update/chunk",{
+            "session":session,"part":part,"data":data,
+        })
+        return response["received"]
+
+    async def apk_finish(self, session: str) -> dict:
+        return await self.call("POST","/api/v1/update/finish",{"session":session})
+
+    async def media_begin(self, size: int, sha256: str) -> str:
+        result = await self.call("POST", "/api/v1/photos/import_begin", {
+            "bytes": size, "sha256": sha256,
+        })
+        return result["session"]
+
+    async def media_chunk(self, session: str, index: int, data: str) -> int:
+        result = await self.call("POST", "/api/v1/photos/import_chunk", {
+            "session": session, "part": index, "data": data,
+        })
+        return result["received"]
+
+    async def media_finish(self, session: str) -> str:
+        result = await self.call("POST", "/api/v1/photos/import_finish", {
+            "session": session,
+        })
+        return result["id"]
+
+    async def photos(self) -> list[dict]:
+        result = await self.call("GET", "/api/v1/photos")
+        rows = result.get("photos", [])
+        if not isinstance(rows, list):
+            raise FrameApiError("Invalid photo list")
+        return rows[:100]
+
+    async def upload_photo(self, encoded: str) -> str:
+        result = await self.call("POST", "/api/v1/photos/upload", {
+            "type": "image/jpeg", "data": encoded,
+        })
+        return result.get("id", "")
+
+    async def delete_photo(self, image_id: str) -> bool:
+        result = await self.call("POST", "/api/v1/photos/delete", {"id": image_id})
+        return result.get("deleted") is True
 
     async def logs(self) -> list[str]:
         result = await self.call("GET", "/api/v1/logs")

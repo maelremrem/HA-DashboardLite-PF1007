@@ -1,4 +1,4 @@
-# HA Frame — PF1007 native dashboard (Android v2.1.0 / HA integration v2.1.0)
+# HA Frame — PF1007 native dashboard (Android v2.2.0 / HA integration v2.2.0)
 
 A lightweight, native Java dashboard for Android 6.0.1 (API 23), built for the PF1007 1280 × 800 ARMv7 photo frame.
 
@@ -25,6 +25,12 @@ The Home Assistant integration now exposes a **Configure** wizard that edits the
 This release changes **only the HA integration**. The existing Android **v0.7 APK** continues to work; stored HA credentials and brightness/night settings are unchanged. The editor is a guided native Home Assistant form (up/down reordering, **not drag-and-drop**).
 
 See [Home Assistant editor guide](docs/home-assistant-editor.md).
+
+## Studio + PF1007 2.2.0 — complete dashboard workflow (beta)
+
+This release extends the 2.1 baseline with real HA calendar/to-do item lists, independent Bambu progress/time sensors, state-dependent MDI icons, smooth photo transitions and quiet hours, remote photo uploads, browsable Home Assistant Media albums, priority alerts and signed APK staging through Studio. **Both HA integration and Android APK 2.2.0 are required.**
+
+One-time final test: `bash scripts/final-check-fedora.sh` on Fedora after HACS update. [Release guide](docs/v2.2-complete.md) · [Full roadmap](docs/ROADMAP.md).
 
 ## HA Frame Studio + Android v2.1.0 — Advanced dashboard
 

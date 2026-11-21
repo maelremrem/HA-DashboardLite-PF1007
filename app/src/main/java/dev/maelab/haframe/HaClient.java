@@ -60,6 +60,7 @@ final class HaClient {
         volatile long nextRequestAt;
     }
     private final CameraFeed cameraFeed;
+    private final RichContentFeed richContent;
     private final Listener listener;
     private final String endpoint;
     private final String token;
@@ -109,6 +110,7 @@ final class HaClient {
         this.entities = entities;
         this.listener = listener;
         this.cameraFeed = new CameraFeed(client, endpoint, token, this::changed);
+        this.richContent = new RichContentFeed(client, endpoint, token, this::changed);
     }
 
     EntityState get(String id) {
@@ -236,6 +238,8 @@ final class HaClient {
         return cameraFeed.frame(entityId);
     }
 
+    JSONArray richItems(String entityId) { return richContent.items(entityId); }
+
     boolean isConnected() {
         return authenticated;
     }
@@ -248,6 +252,7 @@ final class HaClient {
 
     void stop() {
         cameraFeed.stop();
+        richContent.stop();
         stopped = true;
         authenticated = false;
         main.removeCallbacks(reconnect);

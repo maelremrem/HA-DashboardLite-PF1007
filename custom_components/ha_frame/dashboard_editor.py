@@ -154,7 +154,7 @@ def validate_condition(rule: dict, *, visual: bool) -> None:
         raise ValueError("Invalid dashboard condition")
     allowed = {"entity_id", "operator", "value"}
     if visual:
-        allowed |= {"hide", "background"}
+        allowed |= {"hide", "background", "icon", "icon_path"}
     if set(rule) - allowed:
         raise ValueError("Unknown rule option")
     entity_id = rule.get("entity_id", "")
@@ -175,6 +175,8 @@ def validate_condition(rule: dict, *, visual: bool) -> None:
         raise ValueError("Invalid time window")
     if operator in {"equals", "not_equals"} and not value:
         raise ValueError("Rule comparison value required")
+    if visual and ("icon" in rule or "icon_path" in rule):
+        validate_icon({"icon":rule.get("icon",""), "icon_path":rule.get("icon_path","")})
     if "hide" in rule and type(rule["hide"]) is not bool:
         raise ValueError("Invalid visibility rule")
     if "background" in rule and (
@@ -212,6 +214,12 @@ def validate_pages(pages: list[dict]) -> None:
                 raise ValueError("Unsupported tile long press")
             if type(card.get("history_hours", 24)) is not int or card.get("history_hours", 24) not in HISTORY_WINDOWS:
                 raise ValueError("History window must be 1, 24 or 168 hours")
+            for field in ("progress_entity", "remaining_entity"):
+                value = card.get(field, "")
+                if not isinstance(value, str) or (value and (
+                    card.get("type") != "bambu" or not ENTITY_ID.fullmatch(value)
+                )):
+                    raise ValueError("Invalid Bambu linked sensor")
             if card.get("type") == "camera" and card.get("entity_id") and not card["entity_id"].startswith("camera."):
                 raise ValueError("Camera widget requires a camera entity")
             if card.get("type") == "weather" and card.get("entity_id") and not card["entity_id"].startswith("weather."):
