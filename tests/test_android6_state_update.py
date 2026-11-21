@@ -22,7 +22,7 @@ class Android6StateUpdateTests(unittest.TestCase):
     def test_android6_compatibility_and_release_version(self):
         gradle = (ROOT / "app/build.gradle").read_text()
         self.assertRegex(gradle, r"minSdk\s+23\b")
-        self.assertIn("versionName '2.1.0'", gradle)
+        self.assertIn("versionName '2.2.0'", gradle)
 
 
 if __name__ == "__main__":
