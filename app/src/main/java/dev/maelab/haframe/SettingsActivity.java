@@ -186,12 +186,14 @@ public final class SettingsActivity extends Activity {
             @Override public void run() {
                 try {
                     final UpdateVerifier.Candidate candidate=UpdateVerifier.verify(SettingsActivity.this);
+                    final java.io.File backup=UpdateVerifier.backupInstalled(SettingsActivity.this);
                     runOnUiThread(new Runnable() {
                         @Override public void run() {
                             new android.app.AlertDialog.Builder(SettingsActivity.this)
                                 .setTitle("APK signé et vérifié : " + candidate.version)
                                 .setMessage("Empreinte SHA-256 :\\n" + candidate.sha256 +
-                                    "\\n\\nL’installation demandera une confirmation Android.")
+                                    "\\n\\nSauvegarde de récupération : " + backup.getName() +
+                                    "\\nL’installation demandera une confirmation Android.")
                                 .setPositiveButton("Installer", new android.content.DialogInterface.OnClickListener() {
                                     @Override public void onClick(android.content.DialogInterface dialog,int which) {
                                         try { UpdateVerifier.launchInstaller(SettingsActivity.this,candidate); }
