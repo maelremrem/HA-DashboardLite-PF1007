@@ -89,6 +89,28 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             vol.Optional("custom_css"): str,
             vol.Optional("pages"): str,
         }))
+    async def show_alert(call: ServiceCall) -> None:
+        device_id = call.data["device_id"]
+        coordinator = next((c for c in hass.data[DOMAIN].values()
+            if c.entry.data.get("device_id") == device_id), None)
+        if coordinator is None:
+            raise HomeAssistantError("HA Frame device not found")
+        try:
+            await coordinator.api.notify(
+                call.data["message"], call.data.get("title", "Home Assistant"),
+                call.data.get("duration", 12), call.data.get("priority", 1),
+            )
+        except FrameApiError as error:
+            raise HomeAssistantError("Could not deliver the alert") from error
+
+    hass.services.async_register(DOMAIN, "show_alert", show_alert,
+        schema=vol.Schema({
+            vol.Required("device_id"): str,
+            vol.Required("message"): vol.All(str, vol.Length(min=1, max=500)),
+            vol.Optional("title"): vol.All(str, vol.Length(max=80)),
+            vol.Optional("duration", default=12): vol.All(vol.Coerce(int),vol.Range(min=3,max=60)),
+            vol.Optional("priority", default=1): vol.All(vol.Coerce(int),vol.Range(min=0,max=3)),
+        }))
     return True
 
 
