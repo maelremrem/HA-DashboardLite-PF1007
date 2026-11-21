@@ -47,9 +47,26 @@ final class PhotoLibrary {
         if(base64==null||base64.length()>MAX_JPEG*4/3+8||
             !base64.matches("[A-Za-z0-9+/]+={0,2}"))
             throw new IllegalArgumentException("Invalid JPEG payload");
+        byte[] bytes=Base64.decode(base64,Base64.DEFAULT);
+        return addBytes(context,bytes,null);
+    }
+
+    static synchronized String addBytes(Context context,byte[] bytes,String originalSha) throws Exception {
+        if(bytes==null)throw new IllegalArgumentException("Missing photo");
+        String fingerprint=originalSha;
+        if(fingerprint==null) {
+            byte[] sha=java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder hex=new StringBuilder();
+            for(byte b:sha)hex.append(String.format(Locale.US,"%02x",b&255));
+            fingerprint=hex.toString();
+        }
+        if(!fingerprint.matches("[0-9a-f]{64}"))
+            throw new IllegalArgumentException("Invalid photo fingerprint");
+        String id="photo_"+fingerprint.substring(0,16)+".jpg";
+        File destination=new File(folder(context),id);
+        if(destination.isFile())return id;
         if(list(context).length()>=MAX_PHOTOS)
             throw new IllegalArgumentException("Photo library full");
-        byte[] bytes=Base64.decode(base64,Base64.DEFAULT);
         if(bytes.length<20||bytes.length>MAX_JPEG||
             bytes[0]!=(byte)0xFF||bytes[1]!=(byte)0xD8||
             bytes[bytes.length-2]!=(byte)0xFF||bytes[bytes.length-1]!=(byte)0xD9)
@@ -60,8 +77,6 @@ final class PhotoLibrary {
         if(options.outWidth<1||options.outHeight<1||
             options.outWidth>2048||options.outHeight>2048)
             throw new IllegalArgumentException("JPEG dimensions out of bounds");
-        String id=String.format(Locale.US,"photo_%016x.jpg",RANDOM.nextLong());
-        File destination=new File(folder(context),id);
         File temporary=new File(folder(context),id+".tmp");
         try(FileOutputStream out=new FileOutputStream(temporary)) {
             out.write(bytes);
