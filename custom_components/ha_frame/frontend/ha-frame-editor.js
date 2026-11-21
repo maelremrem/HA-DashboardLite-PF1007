@@ -500,6 +500,10 @@ class HaFrameVisualEditor extends HTMLElement {
     this._screenshot = "";
     this._deviceEvents = [];
     this._photoLibrary = [];
+    this._mediaRoots = [];
+    this._mediaSource = "";
+    this._mediaFolder = "";
+    this._mediaBrowse = {folders:[],photos:0};
     this._apkProgress = "";
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
@@ -1009,6 +1013,20 @@ class HaFrameVisualEditor extends HTMLElement {
           esc(opts.camera_entity||"") + "'></label>" : "") +
         "<label class='field'><span>Horloge sur les photos</span><input type='checkbox' data-bind='photo-clock'" +
           (opts.show_clock?" checked":"") + "></label>" +
+        "<div class='inspector-head'><strong>Synchronisation depuis les médias Home Assistant</strong></div>" +
+        "<label class='field'>Bibliothèque HA<select data-control='media-source'>" +
+          this._mediaRoots.map(name=>option(name,name,this._mediaSource)).join("") +
+        "</select></label>" +
+        "<label class='field'>Dossier (relatif à cette bibliothèque)<input data-control='media-folder' " +
+          "value='" + esc(this._mediaFolder) + "' placeholder='Famille/Vacances'></label>" +
+        "<div class='actions'><button data-action='media-parent'>Dossier parent</button>" +
+          "<button data-action='media-browse'>Parcourir</button>" +
+          "<button data-action='media-sync'>Synchroniser vers ce cadre</button></div>" +
+        "<p class='hint'>Photos dans ce dossier : " + this._mediaBrowse.photos +
+          " · Dossiers enfants : " + this._mediaBrowse.folders.length + "</p>" +
+        "<div class='actions'>" + this._mediaBrowse.folders.map(name=>
+          "<button class='btn-small' data-media-entry='" + esc(name) + "'>" +
+          esc(name) + "</button>").join("") + "</div>" +
         "<div class='inspector-head'><strong>Bibliothèque de photos du cadre</strong></div>" +
         "<div class='actions'><button data-action='photo-pick'>Ajouter des photos</button>" +
         "<button data-action='photos-refresh'>Actualiser</button></div>" +
@@ -1179,6 +1197,15 @@ class HaFrameVisualEditor extends HTMLElement {
       this._panel = "page";
       this._render(); return;
     }
+    const mediaDirectory = event.target.closest("[data-media-entry]");
+    if (mediaDirectory) {
+      const name=mediaDirectory.dataset.mediaEntry;
+      if (name && !name.includes("/") && name!==".." && name!==".") {
+        this._mediaFolder=[this._mediaFolder,name].filter(Boolean).join("/");
+        this._browseMedia();
+      }
+      return;
+    }
     const theme = event.target.closest("[data-preset]");
     if (theme) { this._applyPreset(theme.dataset.preset); return; }
     const layout = event.target.closest("[data-layout]");
@@ -1207,6 +1234,11 @@ class HaFrameVisualEditor extends HTMLElement {
     if (this._busy) {
       if (target.dataset.control === "frame") target.value = this._frameId;
       return;
+    }
+    if (target.dataset.control === "media-source") {
+      this._mediaSource=target.value;
+      this._mediaFolder="";
+      this._browseMedia();return;
     }
     if (target.dataset.control === "frame") {
       const next = target.value, previous = this._frameId;
@@ -1737,6 +1769,56 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
   }
+  async _loadMediaRoots() {
+    try {
+      const response=await this._hass.callWS({type:"ha_frame/editor/media_roots"});
+      this._mediaRoots=(response.roots||[]).slice(0,30);
+      if(!this._mediaRoots.includes(this._mediaSource))
+        this._mediaSource=this._mediaRoots[0]||"";
+      if(this._mediaSource)await this._browseMedia();
+    }catch(error) {
+      this._message("Médias Home Assistant indisponibles : "+(error.message||error),true);
+    }
+  }
+  async _browseMedia() {
+    if(!this._mediaSource)return;
+    const folder=this._mediaFolder,source=this._mediaSource;
+    try {
+      const result=await this._hass.callWS({type:"ha_frame/editor/media_browse",source,folder});
+      if(folder!==this._mediaFolder || source!==this._mediaSource)return;
+      this._mediaBrowse=result||{folders:[],photos:0};
+      if(this._panel==="photos")this._inspector();
+    }catch(error) {
+      this._message("Dossier inaccessible : "+(error.message||error),true);
+    }
+  }
+  async _mediaAction(action) {
+    if(action==="media-parent") {
+      this._mediaFolder=this._mediaFolder.split("/").slice(0,-1).join("/");
+      return this._browseMedia();
+    }
+    const input=this.shadowRoot.querySelector("[data-control='media-folder']");
+    if(input)this._mediaFolder=input.value.trim();
+    if(action==="media-browse")return this._browseMedia();
+    if(action==="media-sync") {
+      if(!this._mediaSource)return this._message("Choisir une bibliothèque HA",true);
+      if(!confirm("Synchroniser les photos de cet album vers le cadre sélectionné ?"))return;
+      const frameId=this._frameId;
+      this._busy=true;
+      this._message("Synchronisation album en cours…",false);
+      try {
+        const result=await this._hass.callWS({type:"ha_frame/editor/media_sync",
+          entry_id:frameId,source:this._mediaSource,folder:this._mediaFolder});
+        if(frameId===this._frameId) {
+          this._message(result.transferred+" photo(s) envoyée(s), "+
+            result.unchanged+" déjà présentes",false);
+          await this._refreshPhotos();
+        }
+      }catch(error){
+        this._message("Synchronisation interrompue : "+(error.message||error),true);
+      }finally{this._busy=false;}
+    }
+  }
   async _refreshPhotos() {
     const frameId=this._frameId;
     try {
@@ -1854,9 +1936,11 @@ class HaFrameVisualEditor extends HTMLElement {
     if (action === "photos") {
       this._panel="photos";this._tile=-1;
       this._render();
-      await this._refreshPhotos();
+      await Promise.all([this._refreshPhotos(),this._loadMediaRoots()]);
       return;
     }
+    if (["media-parent","media-browse","media-sync"].includes(action))
+      return this._mediaAction(action);
     if (["photo-pick","photos-refresh","photo-delete"].includes(action)) {
       return this._photoAction(action);
     }
