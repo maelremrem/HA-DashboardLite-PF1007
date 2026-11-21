@@ -802,8 +802,13 @@ class HaFrameVisualEditor extends HTMLElement {
         hint = "Liste Home Assistant";
       } else if (tile.type === "bambu") {
         value = raw;
-        percent = Number.isFinite(Number(attrs.progress)) ? Number(attrs.progress) : null;
-        hint = attrs.remaining_time || attrs.friendly_name || "Imprimante 3D";
+        const progressState=tile.progress_entity && states[tile.progress_entity];
+        const timeState=tile.remaining_entity && states[tile.remaining_entity];
+        const progressValue=progressState ? progressState.state : attrs.progress;
+        percent = progressValue!==undefined && Number.isFinite(Number(progressValue)) ?
+          Number(progressValue) : null;
+        hint = (percent==null?"":Math.round(percent)+"% · ") +
+          (timeState?.state || attrs.remaining_time || attrs.friendly_name || "Imprimante 3D");
       } else if (["energy","air_quality"].includes(tile.type)) {
         value = raw === "—" ? "—" : raw + (attrs.unit_of_measurement ? " " + attrs.unit_of_measurement : "");
       } else if (tile.type === "presence") {
@@ -1093,6 +1098,15 @@ class HaFrameVisualEditor extends HTMLElement {
         (tile.type==="camera" ? "<p class='hint'>Flux MJPEG via Home Assistant, avec repli JPEG (≈ 1 image/s). Un seul flux actif sur le cadre, sans audio. APK 1.0.0 requis.</p>" : "") +
         (tile.type==="graph" ? "<p class='hint'>Courbe des 24 derniers changements de valeur depuis la connexion du cadre ; sans historique permanent.</p>" : "") +
         (tile.type==="weather" ? "<p class='hint'>Utilise une entité météo Home Assistant : weather.*</p>" : "") +
+        (tile.type==="bambu" ?
+          "<label class='field'>Capteur progression (%)<input data-bind='bambu-progress' " +
+          "list='ha-frame-entities' placeholder='sensor.x1c_progression' value='" +
+          esc(tile.progress_entity||"") + "'></label>" +
+          "<label class='field'>Capteur temps restant<input data-bind='bambu-remaining' " +
+          "list='ha-frame-entities' placeholder='sensor.x1c_temps_restant' value='" +
+          esc(tile.remaining_entity||"") + "'></label>" +
+          "<p class='hint'>Relie les capteurs existants de ton intégration Bambu Lab, indépendamment de l’entité d’état.</p>"
+          : "") +
         (["gauge","circular_gauge"].includes(tile.type) ?
           "<div class='row'><label class='field' style='flex:1'>Minimum<input data-bind='card-min' type='number' value='" +
           esc(tile.min) + "'></label><label class='field' style='flex:1'>Maximum<input data-bind='card-max' type='number' value='" +
@@ -1316,9 +1330,17 @@ class HaFrameVisualEditor extends HTMLElement {
         return;
       }
     } else if (tile) {
-      if (bind === "card-type") tile.type = target.value;
+      if (bind === "card-type") {
+        tile.type = target.value;
+        if (tile.type!=="bambu") {
+          delete tile.progress_entity;
+          delete tile.remaining_entity;
+        }
+      }
       if (bind === "card-label") tile.label = target.value;
       if (bind === "card-entity") tile.entity_id = target.value.trim();
+      if (bind === "bambu-progress") tile.progress_entity = target.value.trim();
+      if (bind === "bambu-remaining") tile.remaining_entity = target.value.trim();
       if (bind === "card-min") tile.min = Number(target.value);
       if (bind === "card-max") tile.max = Number(target.value);
       if (bind === "history-hours") tile.history_hours = Number(target.value);
@@ -1500,6 +1522,9 @@ class HaFrameVisualEditor extends HTMLElement {
           const problem = checkRule(tile.rule, true);
           if (problem) return "Tuile conditionnelle : " + problem;
         }
+        if (["progress_entity","remaining_entity"].some(key=>
+          tile[key] && (tile.type!=="bambu" || !RULE_ENTITY_RE.test(tile[key]))))
+          return "Capteur Bambu invalide";
         if (!TAP_ACTIONS.some(([key])=>key===(tile.tap_action||"default"))) return "Action tactile invalide";
         if (!LONG_PRESS_ACTIONS.some(([key])=>key===(tile.long_press||"none"))) return "Appui long invalide";
         if (tile.history_hours && ![1,24,168].includes(tile.history_hours)) return "Période historique invalide";
