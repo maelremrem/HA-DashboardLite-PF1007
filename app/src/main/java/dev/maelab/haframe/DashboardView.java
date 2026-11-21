@@ -71,9 +71,25 @@ final class DashboardView extends View {
     private boolean photoActive;
     private long lastInteraction = SystemClock.elapsedRealtime();
     private long lastPhotoAt;
+    private boolean slideshowQuiet() {
+        String start=config.slideshow.optString("quiet_start","");
+        String end=config.slideshow.optString("quiet_end","");
+        if (start.length()!=5 || end.length()!=5) return false;
+        try {
+            int a=Integer.parseInt(start.substring(0,2))*60 +
+                Integer.parseInt(start.substring(3,5));
+            int b=Integer.parseInt(end.substring(0,2))*60 +
+                Integer.parseInt(end.substring(3,5));
+            java.util.Calendar now=java.util.Calendar.getInstance();
+            int value=now.get(java.util.Calendar.HOUR_OF_DAY)*60+
+                now.get(java.util.Calendar.MINUTE);
+            return a<b ? value>=a&&value<b : a>b&&(value>=a||value<b);
+        } catch (NumberFormatException ignored) {return false;}
+    }
     private final Runnable slideshowTick = new Runnable() {
         @Override public void run() {
-            if (!sleeping && config.slideshow.optBoolean("enabled", false)) {
+            if (!sleeping && config.slideshow.optBoolean("enabled", false) &&
+                !slideshowQuiet()) {
                 long now = SystemClock.elapsedRealtime();
                 if (now - lastInteraction >= config.slideshow.optInt("idle_seconds",300)*1000L) {
                     if (!photoActive) {
@@ -289,9 +305,26 @@ final class DashboardView extends View {
         float w=picture.getWidth()*factor, h=picture.getHeight()*factor;
         paint.setColor(0xFFFFFFFF);
         paint.setFilterBitmap(true);
-        canvas.drawBitmap(picture,null,new RectF(
-            (getWidth()-w)/2f,(getHeight()-h)/2f,
-            (getWidth()+w)/2f,(getHeight()+h)/2f),paint);
+        RectF destination = new RectF((getWidth()-w)/2f,(getHeight()-h)/2f,
+            (getWidth()+w)/2f,(getHeight()+h)/2f);
+        Bitmap old = photos.previous();
+        int duration = config.slideshow.optInt("transition_ms",800);
+        long elapsed=SystemClock.elapsedRealtime()-photos.transitionAt();
+        boolean fading="local".equals(config.slideshow.optString("source","local")) &&
+            old != null && !old.isRecycled() && old != picture &&
+            duration>0 && elapsed<duration;
+        if(fading) {
+            float oldFactor=Math.min(getWidth()/(float)old.getWidth(),
+                getHeight()/(float)old.getHeight());
+            float oldW=old.getWidth()*oldFactor,oldH=old.getHeight()*oldFactor;
+            paint.setAlpha(255);
+            canvas.drawBitmap(old,null,new RectF((getWidth()-oldW)/2f,(getHeight()-oldH)/2f,
+                (getWidth()+oldW)/2f,(getHeight()+oldH)/2f),paint);
+            paint.setAlpha(Math.max(0,Math.min(255,(int)(255f*elapsed/duration))));
+        }
+        canvas.drawBitmap(picture,null,destination,paint);
+        paint.setAlpha(255);
+        if (fading) postInvalidateDelayed(32L);
         if (config.slideshow.optBoolean("show_clock",true)) {
             rect(canvas,16,16,142,56,11,0x99000000);
             text(canvas,clock.format(new Date()),28,55,32,0xFFFFFFFF,true,118);
