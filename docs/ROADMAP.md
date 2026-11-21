@@ -41,6 +41,12 @@ Each phase needs a green CI run, UI review in Home Assistant, a test with a phys
 - Profile synchronization is opt-in per frame; preserve each frame’s separate configuration, revisions and device identity.
 - A rooted PF1007 may support privileged installation, but signed APK distribution, recovery and rollback must be designed before enabling remote updates.
 
+## Completion pass — 2.2.0 beta
+
+Implemented in `feature/v2.2-complete-roadmap`: full HA calendar/to-do items (up to five visible), Bambu state/progress/time mapping, conditional MDI icons, photo crossfades and quiet hours, Studio photo uploads, Home Assistant media-folder album sync, prioritized HA notifications and an authenticated, SHA-256-checked remote APK staging flow with physical confirmation. One command on Fedora builds/installs/collects crash logs. See [2.2 guide](v2.2-complete.md).
+
+**Intentional safety boundary:** no silent APK installation, arbitrary media URL fetching or unattended Android downgrade. Media sync is additive and restricted to HA `media_dirs`. Physical acceptance testing remains outstanding, as requested for the end of the implementation batch.
+
 ## Implementation status (v2.1 feature branch)
 
 **v1.5: merged into main**, including the Studio workflow and its tests.
