@@ -500,6 +500,7 @@ class HaFrameVisualEditor extends HTMLElement {
     this._screenshot = "";
     this._deviceEvents = [];
     this._photoLibrary = [];
+    this._apkProgress = "";
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -954,9 +955,13 @@ class HaFrameVisualEditor extends HTMLElement {
         (this._panel==="device" ? "<div class='actions'><button data-action='logs-refresh'>Événements du cadre</button></div>" +
           "<pre class='device-log'>" + esc(this._deviceEvents.join("\n")) + "</pre>" : "") +
         (this._panel==="updates" ?
-          "<p class='hint'>Mise à jour sécurisée : vérifie l’empreinte de signature de l’APK, " +
-          "puis installe la nouvelle version depuis Fedora avec adb install -r. " +
-          "L’installation distante automatique reste désactivée tant qu’une signature stable et un mécanisme de récupération n’ont pas été validés sur l’appareil.</p>" :
+          "<div class='inspector-head'><strong>Préparer un APK depuis Studio</strong></div>" +
+          "<button data-action='apk-pick'>Envoyer un APK signé sur le cadre</button>" +
+          "<input type='file' data-apk-file accept='.apk,application/vnd.android.package-archive' hidden>" +
+          "<p class='hint' data-apk-progress>" + esc(this._apkProgress || "Aucune mise à jour préparée") + "</p>" +
+          "<p class='hint'>L’envoi vérifie le SHA-256, le nom de package et le certificat de signature. " +
+          "Il n’installe rien à distance : sur le cadre, ouvre Réglages puis Vérifier un APK. " +
+          "Conserve une sauvegarde de l'APK précédent pour récupération.</p>" :
           "<p class='hint'>L’image est uniquement récupérée sur demande via le LAN authentifié, en JPEG 640×400. " +
           "Recharger redémarre l’affichage de l’application, pas Android.</p>");
     } else if (this._panel === "profiles") {
@@ -1183,6 +1188,11 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (target.dataset.apkFile !== undefined) {
+      this._uploadApk(target.files && target.files[0]);
+      target.value="";
+      return;
+    }
     if (target.dataset.photoImport !== undefined) {
       const files = target.files;
       this._uploadPhotos(files);
@@ -1633,6 +1643,49 @@ class HaFrameVisualEditor extends HTMLElement {
     link.remove();
     URL.revokeObjectURL(url);
   }
+  async _uploadApk(file) {
+    if (!file || this._busy) return;
+    if (file.size<1024 || file.size>48*1024*1024 || !/\.apk$/i.test(file.name))
+      return this._message("Sélectionne un APK de moins de 48 Mo",true);
+    if (!globalThis.crypto?.subtle) return this._message("HTTPS requis pour calculer le SHA-256",true);
+    if (!confirm("Préparer cette mise à jour sur le cadre ? La version installée ne sera pas modifiée."))return;
+    const frameId=this._frameId;
+    this._busy=true;
+    const progress=text=>{
+      this._apkProgress=text;
+      const label=this.shadowRoot.querySelector("[data-apk-progress]");
+      if(label)label.textContent=text;
+    };
+    try {
+      progress("Calcul de l’empreinte SHA-256…");
+      const digest=await crypto.subtle.digest("SHA-256",await file.arrayBuffer());
+      const sha256=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join("");
+      const begin=await this._hass.callWS({type:"ha_frame/editor/apk_begin",entry_id:frameId,
+        bytes:file.size,sha256});
+      const session=begin.session;
+      if (!/^[0-9a-f]{32}$/.test(session||"")) throw new Error("Session de transfert invalide");
+      const step=60000;
+      for(let offset=0,part=0;offset<file.size;offset+=step,part++) {
+        if(frameId!==this._frameId)throw new Error("Cadre modifié pendant le transfert");
+        const bytes=new Uint8Array(await file.slice(offset,offset+step).arrayBuffer());
+        let binary="";
+        for(let i=0;i<bytes.length;i+=8192)
+          binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+        await this._hass.callWS({type:"ha_frame/editor/apk_chunk",
+          entry_id:frameId,session,part,data:btoa(binary)});
+        progress("Transfert sécurisé : "+Math.round(100*Math.min(file.size,offset+step)/file.size)+"%");
+      }
+      progress("Vérification de la signature sur le cadre…");
+      const result=await this._hass.callWS({type:"ha_frame/editor/apk_finish",
+        entry_id:frameId,session});
+      if(!result.ready_for_local_confirmation)throw new Error("Signature APK non validée");
+      progress("APK "+result.version+" vérifié et prêt. Confirme l’installation sur le PF1007 dans les réglages.");
+      this._message("APK préparé et vérifié. Confirmation locale requise.",false);
+    }catch(error){
+      progress("Échec : "+(error.message||error));
+      this._message("Mise à jour refusée : "+(error.message||error),true);
+    }finally{this._busy=false;}
+  }
   async _refreshDiagnostics() {
     const frameId=this._frameId;
     try {
@@ -1810,6 +1863,10 @@ class HaFrameVisualEditor extends HTMLElement {
     if (action === "profiles") {
       this._panel="profiles";this._tile=-1;
       await this._loadLibrary();this._render();return;
+    }
+    if (action==="apk-pick") {
+      this.shadowRoot.querySelector("[data-apk-file]")?.click();
+      return;
     }
     if (action==="device" || action==="updates") {
       this._panel=action;this._tile=-1;
