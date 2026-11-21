@@ -247,7 +247,19 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("GET".equals(req.method) && "/api/v1/logs".equals(req.path)) {
+                if ("GET".equals(req.method) && "/api/v1/photos".equals(req.path)) {
+                    send(out, 200, new JSONObject().put("photos", PhotoLibrary.list(context)));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/upload".equals(req.path)) {
+                    JSONObject request = new JSONObject(req.body);
+                    if (!"image/jpeg".equals(request.optString("type","")))
+                        throw new IllegalArgumentException("Only JPEG photos allowed");
+                    String id = PhotoLibrary.add(context,request.optString("data",""));
+                    send(out, 200, new JSONObject().put("id",id));
+                } else if ("POST".equals(req.method) && "/api/v1/photos/delete".equals(req.path)) {
+                    JSONObject request = new JSONObject(req.body);
+                    boolean removed = PhotoLibrary.delete(context,request.optString("id",""));
+                    send(out, 200, new JSONObject().put("deleted",removed));
+                } else if ("GET".equals(req.method) && "/api/v1/logs".equals(req.path)) {
                     send(out, 200, new JSONObject().put("events", DiagnosticLog.snapshot()));
                 } else if ("GET".equals(req.method) && "/api/v1/screenshot".equals(req.path)) {
                     long now = SystemClock.elapsedRealtime();
