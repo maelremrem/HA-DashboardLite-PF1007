@@ -14,6 +14,7 @@ from .api import FrameApiError
 from .const import DOMAIN
 from .dashboard_editor import validate_pages
 from . import studio_store
+from . import media_album
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -396,6 +397,54 @@ async def editor_apk_finish(hass, connection, msg):
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/media_roots",
+})
+@websocket_api.async_response
+async def editor_media_roots(hass, connection, msg):
+    connection.send_result(msg["id"], {
+        "roots": sorted((hass.config.media_dirs or {}).keys())
+    })
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/media_browse",
+    vol.Required("source"): str,
+    vol.Required("folder"): str,
+})
+@websocket_api.async_response
+async def editor_media_browse(hass, connection, msg):
+    try:
+        content = await media_album.browse(hass, msg["source"], msg["folder"])
+    except (OSError, ValueError):
+        connection.send_error(msg["id"], "invalid_folder", "Media folder is unavailable")
+        return
+    connection.send_result(msg["id"], content)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/media_sync",
+    vol.Required("entry_id"): str,
+    vol.Required("source"): str,
+    vol.Required("folder"): str,
+})
+@websocket_api.async_response
+async def editor_media_sync(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    try:
+        result = await media_album.sync(hass, coordinator, msg["source"], msg["folder"])
+    except (FrameApiError, OSError, ValueError):
+        connection.send_error(msg["id"], "sync_failed", "Album sync could not finish")
+        return
+    connection.send_result(msg["id"], result)
+
+
 DIAGNOSTIC_FIELDS = {
     "version", "android_version", "uptime_seconds", "wifi_connected",
     "wifi_ssid", "wifi_ip", "wifi_rssi_dbm", "wifi_quality_percent",
@@ -500,6 +549,9 @@ def async_register_editor_commands(hass):
     websocket_api.async_register_command(hass, editor_photos)
     websocket_api.async_register_command(hass, editor_photo_upload)
     websocket_api.async_register_command(hass, editor_photo_delete)
+    websocket_api.async_register_command(hass, editor_media_roots)
+    websocket_api.async_register_command(hass, editor_media_browse)
+    websocket_api.async_register_command(hass, editor_media_sync)
     websocket_api.async_register_command(hass, editor_apk_begin)
     websocket_api.async_register_command(hass, editor_apk_chunk)
     websocket_api.async_register_command(hass, editor_apk_finish)
