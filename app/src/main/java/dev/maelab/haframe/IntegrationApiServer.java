@@ -330,10 +330,13 @@ final class IntegrationApiServer {
                     String title = data.optString("title", "Home Assistant");
                     String message = data.optString("message", "");
                     int seconds = data.optInt("duration", 12);
-                    if (message.isEmpty() || message.length() > 500 || title.length() > 80 || seconds < 3 || seconds > 60)
+                    int priority = data.optInt("priority",1);
+                    if (priority < 0 || priority > 3 ||
+                        message.isEmpty() || message.length() > 500 || title.length() > 80 || seconds < 3 || seconds > 60)
                         throw new IllegalArgumentException("Invalid notification");
                     context.sendBroadcast(new Intent(ACTION_NOTIFY).setPackage(context.getPackageName())
-                        .putExtra("title", title).putExtra("message", message).putExtra("duration", seconds));
+                        .putExtra("title", title).putExtra("message", message)
+                        .putExtra("priority", priority).putExtra("duration", seconds));
                     NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                     if (manager != null) manager.notify(1001, new Notification.Builder(context)
                         .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title)
