@@ -247,7 +247,24 @@ final class IntegrationApiServer {
                     send(out, 401, new JSONObject().put("error", "Authentication required"));
                     return;
                 }
-                if ("GET".equals(req.method) && "/api/v1/photos".equals(req.path)) {
+                if ("POST".equals(req.method) && "/api/v1/update/begin".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    String id=ApkStaging.begin(context,body.optInt("bytes",0),
+                        body.optString("sha256",""));
+                    send(out,200,new JSONObject().put("session",id));
+                } else if ("POST".equals(req.method) && "/api/v1/update/chunk".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    int received=ApkStaging.chunk(context,body.optString("session",""),
+                        body.optInt("part",-1),body.optString("data",""));
+                    send(out,200,new JSONObject().put("received",received));
+                } else if ("POST".equals(req.method) && "/api/v1/update/finish".equals(req.path)) {
+                    JSONObject body=new JSONObject(req.body);
+                    UpdateVerifier.Candidate candidate=ApkStaging.finish(
+                        context,body.optString("session",""));
+                    send(out,200,new JSONObject().put("version",candidate.version)
+                        .put("sha256",candidate.sha256)
+                        .put("ready_for_local_confirmation",true));
+                } else if ("GET".equals(req.method) && "/api/v1/photos".equals(req.path)) {
                     send(out, 200, new JSONObject().put("photos", PhotoLibrary.list(context)));
                 } else if ("POST".equals(req.method) && "/api/v1/photos/upload".equals(req.path)) {
                     JSONObject request = new JSONObject(req.body);
