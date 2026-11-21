@@ -499,6 +499,7 @@ class HaFrameVisualEditor extends HTMLElement {
     this._deviceStatus = null;
     this._screenshot = "";
     this._deviceEvents = [];
+    this._photoLibrary = [];
     this._loadSequence = 0;
     this.shadowRoot.addEventListener("keydown", (event) => this._shortcut(event));
     this.shadowRoot.addEventListener("click", (event) => this._click(event));
@@ -1003,6 +1004,16 @@ class HaFrameVisualEditor extends HTMLElement {
           esc(opts.camera_entity||"") + "'></label>" : "") +
         "<label class='field'><span>Horloge sur les photos</span><input type='checkbox' data-bind='photo-clock'" +
           (opts.show_clock?" checked":"") + "></label>" +
+        "<div class='inspector-head'><strong>Bibliothèque de photos du cadre</strong></div>" +
+        "<div class='actions'><button data-action='photo-pick'>Ajouter des photos</button>" +
+        "<button data-action='photos-refresh'>Actualiser</button></div>" +
+        "<input data-photo-import type='file' accept='image/jpeg,image/png,image/webp' multiple hidden>" +
+        "<label class='field'>Photos stockées sur ce cadre (" + this._photoLibrary.length +
+        ")<select data-control='photo-picker'>" +
+        this._photoLibrary.map(p=>option(p.id,p.id+" · "+Math.ceil(p.bytes/1024)+" Ko","")).join("") +
+        "</select></label><button data-action='photo-delete' class='danger'>Supprimer la photo sélectionnée</button>" +
+        "<p class='hint'>Ajoute directement depuis ton navigateur. Chaque image est réduite à 1280×800 puis envoyée " +
+        "via Home Assistant sur le réseau local privé de ce cadre. L’envoi n’impacte pas les autres cadres.</p>" +
         "<p class='hint'>Photos locales : copie des JPG/PNG (maximum 6 Mo chacun) dans " +
         "Android/data/dev.maelab.haframe/files/Pictures/HAFrame/ sur le cadre. " +
         "Le défilement est suspendu pendant la veille noire. Source caméra : image authentifiée via HA.</p>";
@@ -1172,6 +1183,12 @@ class HaFrameVisualEditor extends HTMLElement {
   }
   _change(event) {
     const target = event.target;
+    if (target.dataset.photoImport !== undefined) {
+      const files = target.files;
+      this._uploadPhotos(files);
+      target.value = "";
+      return;
+    }
     if (target.dataset.importFile !== undefined) {
       this._importFile(target.files && target.files[0]);
       target.value = "";
@@ -1667,6 +1684,72 @@ class HaFrameVisualEditor extends HTMLElement {
       }
     }
   }
+  async _refreshPhotos() {
+    const frameId=this._frameId;
+    try {
+      const response=await this._hass.callWS({type:"ha_frame/editor/photos",entry_id:frameId});
+      if (frameId!==this._frameId) return;
+      this._photoLibrary=(response.photos||[]).slice(0,100).filter(p=>
+        /^photo_[0-9a-f]{16}\.jpg$/.test(p.id));
+      if (this._panel==="photos") this._inspector();
+    } catch(error) {this._message("Bibliothèque : "+(error.message||error),true);}
+  }
+  async _photoAction(action) {
+    if (action==="photo-pick") {
+      this.shadowRoot.querySelector("[data-photo-import]")?.click();
+      return;
+    }
+    if (action==="photos-refresh") return this._refreshPhotos();
+    if (action==="photo-delete") {
+      const id=this.shadowRoot.querySelector("[data-control='photo-picker']")?.value;
+      if (!id || !confirm("Supprimer cette photo du cadre ?")) return;
+      try {
+        await this._hass.callWS({type:"ha_frame/editor/photo_delete",
+          entry_id:this._frameId,id});
+        await this._refreshPhotos();
+      } catch(error){this._message("Suppression refusée : "+(error.message||error),true);}
+    }
+  }
+  async _uploadPhotos(files) {
+    const frameId=this._frameId;
+    if (!files?.length || this._busy) return;
+    if (files.length>30) return this._message("30 photos maximum par envoi",true);
+    this._busy=true;
+    let uploaded=0;
+    try {
+      for (const file of files) {
+        if (frameId!==this._frameId) break;
+        if (!["image/jpeg","image/png","image/webp"].includes(file.type) ||
+            file.size>10*1024*1024) throw new Error("Image non supportée ou supérieure à 10 Mo");
+        const bitmap=await createImageBitmap(file);
+        try {
+          const factor=Math.min(1,1280/bitmap.width,800/bitmap.height);
+          let width=Math.max(1,Math.round(bitmap.width*factor));
+          let height=Math.max(1,Math.round(bitmap.height*factor));
+          let base64="";
+          for(let attempt=0;attempt<7;attempt++) {
+            const canvas=document.createElement("canvas");
+            canvas.width=width;canvas.height=height;
+            canvas.getContext("2d").drawImage(bitmap,0,0,width,height);
+            base64=canvas.toDataURL("image/jpeg",Math.max(.35,.75-attempt*.07)).split(",")[1];
+            if (base64.length<=125000) break;
+            width=Math.max(1,Math.round(width*.8));
+            height=Math.max(1,Math.round(height*.8));
+          }
+          if (!base64 || base64.length>125000) throw new Error("Impossible de réduire cette image");
+          await this._hass.callWS({type:"ha_frame/editor/photo_upload",
+            entry_id:frameId,data:base64});
+          uploaded++;
+          this._message("Photos envoyées : "+uploaded+" / "+files.length,false);
+        } finally {bitmap.close?.();}
+      }
+    } catch(error) {
+      this._message("Transfert interrompu après "+uploaded+" photo(s) : "+(error.message||error),true);
+    } finally {
+      this._busy=false;
+      if (frameId===this._frameId) await this._refreshPhotos();
+    }
+  }
   async _libraryAction(action) {
     try {
       if (action === "import-layout") {
@@ -1715,6 +1798,15 @@ class HaFrameVisualEditor extends HTMLElement {
       return;
     }
     const page = this._pageObject(), tile = this._tileObject();
+    if (action === "photos") {
+      this._panel="photos";this._tile=-1;
+      this._render();
+      await this._refreshPhotos();
+      return;
+    }
+    if (["photo-pick","photos-refresh","photo-delete"].includes(action)) {
+      return this._photoAction(action);
+    }
     if (action === "profiles") {
       this._panel="profiles";this._tile=-1;
       await this._loadLibrary();this._render();return;
