@@ -256,6 +256,72 @@ async def editor_snapshot_get(hass, connection, msg):
 
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/photos",
+    vol.Required("entry_id"): str,
+})
+@websocket_api.async_response
+async def editor_photos(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    try:
+        photos = await coordinator.api.photos()
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Could not list photos")
+        return
+    connection.send_result(msg["id"], {"photos": photos})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/photo_upload",
+    vol.Required("entry_id"): str,
+    vol.Required("data"): str,
+})
+@websocket_api.async_response
+async def editor_photo_upload(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    encoded = msg["data"]
+    if len(encoded) > 128000 or not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", encoded):
+        connection.send_error(msg["id"], "invalid_format", "JPEG exceeds 96 KB or is invalid")
+        return
+    try:
+        photo_id = await coordinator.api.upload_photo(encoded)
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Photo upload rejected")
+        return
+    connection.send_result(msg["id"], {"id": photo_id})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "ha_frame/editor/photo_delete",
+    vol.Required("entry_id"): str,
+    vol.Required("id"): str,
+})
+@websocket_api.async_response
+async def editor_photo_delete(hass, connection, msg):
+    coordinator = _entry_coordinator(hass, msg["entry_id"])
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "Frame not found")
+        return
+    if not re.fullmatch(r"photo_[0-9a-f]{16}\\.jpg", msg["id"]):
+        connection.send_error(msg["id"], "invalid_format", "Invalid photo ID")
+        return
+    try:
+        removed = await coordinator.api.delete_photo(msg["id"])
+    except FrameApiError:
+        connection.send_error(msg["id"], "unavailable", "Photo delete rejected")
+        return
+    connection.send_result(msg["id"], {"deleted": removed})
+
+
 DIAGNOSTIC_FIELDS = {
     "version", "android_version", "uptime_seconds", "wifi_connected",
     "wifi_ssid", "wifi_ip", "wifi_rssi_dbm", "wifi_quality_percent",
@@ -357,5 +423,8 @@ def async_register_editor_commands(hass):
     websocket_api.async_register_command(hass, editor_snapshot_get)
     websocket_api.async_register_command(hass, editor_diagnostics)
     websocket_api.async_register_command(hass, editor_logs)
+    websocket_api.async_register_command(hass, editor_photos)
+    websocket_api.async_register_command(hass, editor_photo_upload)
+    websocket_api.async_register_command(hass, editor_photo_delete)
     websocket_api.async_register_command(hass, editor_screenshot)
     websocket_api.async_register_command(hass, editor_reload)
