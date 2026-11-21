@@ -21,6 +21,8 @@ final class FrameConfig {
         String type;
         String label;
         String entityId;
+        String progressEntity = "";
+        String remainingEntity = "";
         float min = 0;
         float max = 100;
         int colSpan = 1;
@@ -56,6 +58,8 @@ final class FrameConfig {
             if (!icon.isEmpty()) item.put("icon", icon);
             if (!iconPath.isEmpty()) item.put("icon_path", iconPath);
             if (historyHours != 24) item.put("history_hours", historyHours);
+            if (!progressEntity.isEmpty()) item.put("progress_entity", progressEntity);
+            if (!remainingEntity.isEmpty()) item.put("remaining_entity", remainingEntity);
             if (rule != null) item.put("rule", rule);
             if (!"default".equals(tapAction)) item.put("tap_action", tapAction);
             if (!"none".equals(longPress)) item.put("long_press", longPress);
@@ -230,6 +234,16 @@ final class FrameConfig {
                 Card card = new Card(type, label, entity);
                 card.min = (float) item.optDouble("min", 0);
                 card.max = (float) item.optDouble("max", 100);
+                card.progressEntity = item.optString("progress_entity","");
+                card.remainingEntity = item.optString("remaining_entity","");
+                if (!card.progressEntity.isEmpty() &&
+                    !card.progressEntity.matches("[a-z0-9_]+\\.[a-z0-9_]+") ||
+                    !card.remainingEntity.isEmpty() &&
+                    !card.remainingEntity.matches("[a-z0-9_]+\\.[a-z0-9_]+"))
+                    throw new IllegalArgumentException("Invalid Bambu entity link");
+                if (!"bambu".equals(type) &&
+                    (!card.progressEntity.isEmpty() || !card.remainingEntity.isEmpty()))
+                    throw new IllegalArgumentException("Entity links are only for Bambu widgets");
                 card.historyHours = item.optInt("history_hours", 24);
                 if (card.historyHours != 1 && card.historyHours != 24 && card.historyHours != 168)
                     throw new IllegalArgumentException("Invalid history period");
@@ -318,6 +332,8 @@ final class FrameConfig {
             if (page.activateWhen != null) unique.add(page.activateWhen.optString("entity_id"));
             for (Card card : page.cards) {
                 if (!card.entityId.isEmpty()) unique.add(card.entityId);
+                if (!card.progressEntity.isEmpty()) unique.add(card.progressEntity);
+                if (!card.remainingEntity.isEmpty()) unique.add(card.remainingEntity);
                 if (card.rule != null) unique.add(card.rule.optString("entity_id"));
             }
         }
