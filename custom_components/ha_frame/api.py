@@ -58,6 +58,23 @@ class FrameApi:
     async def wake(self) -> None:
         await self.call("POST", "/api/v1/wake", {})
 
+    async def photos(self) -> list[dict]:
+        result = await self.call("GET", "/api/v1/photos")
+        rows = result.get("photos", [])
+        if not isinstance(rows, list):
+            raise FrameApiError("Invalid photo list")
+        return rows[:100]
+
+    async def upload_photo(self, encoded: str) -> str:
+        result = await self.call("POST", "/api/v1/photos/upload", {
+            "type": "image/jpeg", "data": encoded,
+        })
+        return result.get("id", "")
+
+    async def delete_photo(self, image_id: str) -> bool:
+        result = await self.call("POST", "/api/v1/photos/delete", {"id": image_id})
+        return result.get("deleted") is True
+
     async def logs(self) -> list[str]:
         result = await self.call("GET", "/api/v1/logs")
         events = result.get("events", [])
