@@ -476,8 +476,12 @@ final class DashboardView extends View {
                 customColor(ruleBackground, customColor(card.background, background)));
             canvas.save();
             canvas.clipRect(x + 1, y + 1, x + w - 1, y + h - 1);
-            String icon = card.iconPath.isEmpty() ? TileIcon.effective(card.icon, card.type) : "mdi:cached";
-            TileIcon.draw(canvas, paint, card.icon, card.iconPath, card.type,
+            String name = matchedRule && card.rule != null ?
+                card.rule.optString("icon", card.icon) : card.icon;
+            String path = matchedRule && card.rule != null ?
+                card.rule.optString("icon_path", card.iconPath) : card.iconPath;
+            String icon = path.isEmpty() ? TileIcon.effective(name, card.type) : "mdi:cached";
+            TileIcon.draw(canvas, paint, name, path, card.type,
                 x + w - 52, y + 15, 28, accent);
             text(canvas, card.label.isEmpty() ? card.entityId : card.label, x + 20, y + 39,
                 theme.size(20, "font-size", ".metric-label", category, slot),
